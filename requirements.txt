@@ -1,0 +1,18 @@
+azure-functions
+requests
+beautifulsoup4
+playwright
+pandas
+nltk
+# newspaper3k
+# lxml[html_clean]
+newspaper3k==0.2.8
+lxml==4.9.1
+lxml_html_clean==0.1.0
+python-dotenv
+msal
+openai
+python-docx
+azure-storage-blob
+openpyxl
+
