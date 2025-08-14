@@ -28,7 +28,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          libnsp4-dev \
+          libnspr4-dev \
           libnss3-dev \
           libwoff1 \
           libvpx9 \
@@ -90,4 +90,5 @@ jobs:
         enable-oryx-build: false
 
  
+
 
