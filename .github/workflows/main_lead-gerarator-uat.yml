@@ -75,14 +75,17 @@ jobs:
         mkdir -p ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers
         cp -r /home/runner/.playwright-browsers/* ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers/
         echo "Packaged Playwright Browsers."
-
-    - name: 'Run Azure Functions Action'
+    - name: 'Deploy to Azure Functions'
       uses: Azure/functions-action@v1
-      id: fa
+      id: deploy-to-function
       with:
-        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        app-name: 'Lead-Gerarator-UAT'
+        slot-name: 'Production'
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_5AED830D9F4A460397BA9ECCE14CE145 }}
+        sku: 'flexconsumption'
         scm-do-build-during-deployment: false
         enable-oryx-build: false
+
 
 
