@@ -12,4 +12,4 @@ python -m pip install --upgrade playwright
 # Install Playwright browsers
 playwright install --with-deps
 
-echo "Playwright Browsers Installed"
+echo "Playwright Browsers Installed."
