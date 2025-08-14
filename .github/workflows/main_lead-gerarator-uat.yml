@@ -30,26 +30,20 @@ jobs:
         sudo apt-get install -y \
           libnspr4-dev \
           libnss3-dev \
-          libwoff1 \
-          libvpx9 \
-          libopus0 \
-          libgstreamer-plugins-base1.0-0 \
-          libgstreamer1.0-0 \
-          libharfbuzz-icu0 \
-          libhyphen0 \
-          libmanette-0.2-0 \
-          libflite1 \
-          libsecret-1-0 \
-          libavif16 \
-          libgl1-mesa-dri \
-          libegl1 \
-          libgles2 \
-          libevent-2.1-7 \
-          libgtk-4-1 \
-          libgraphene-1.0-0 \
-          libgstreamer-gl1.0-0 \
-          libgstreamer-plugins-bad1.0-0 \
-          libx264-dev
+          libatk-bridge2.0-0 \
+          libatk1.0-0 \
+          libgdk-pixbuf2.0-0 \
+          libcups2 \
+          libx11-xcb1 \
+          libdbus-1-3 \
+          libxtst6 \
+          libnss3 \
+          libatk1.0-0 \
+          libatk-bridge2.0-0 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxrandr2
+
 
     - name: Install Python Dependencies
       shell: bash
@@ -90,5 +84,6 @@ jobs:
         enable-oryx-build: false
 
  
+
 
 
