@@ -11,65 +11,85 @@ on:
   workflow_dispatch:
 
 env:
+  AZURE_FUNCTIONAPP_NAME: 'Lead-Generator-UAT'
   AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # set this to the path to your web app project, defaults to the repository root
   PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: UAT
+
+    steps:
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@v4
+
+    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install system dependencies for Playwright
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwoff1 \
+          libvpx9 \
+          libopus0 \
+          libgstreamer-plugins-base1.0-0 \
+          libgstreamer1.0-0 \
+          libharfbuzz-icu0 \
+          libhyphen0 \
+          libmanette-0.2-0 \
+          libflite1 \
+          libsecret-1-0 \
+          libavif16 \
+          libgl1-mesa-dri \
+          libegl1 \
+          libgles2 \
+          libevent-2.1-7 \
+          libgtk-4-1 \
+          libgraphene-1.0-0 \
+          libgstreamer-gl1.0-0 \
+          libgstreamer-plugins-bad1.0-0 \
+          libx264-dev
     permissions:
       contents: read #This is required for actions/checkout
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        - name: Install Python Dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
-      - name: Setup Python version
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+    - name: Install Playwright (Python)
+      run: |
+        python -m pip install playwright
+        echo "Playwright Installed."
 
-      - name: Create and start virtual environment
-        run: |
-          python -m venv venv
-          source venv/bin/activate
+    - name: Make `startup.sh` Executable
+      run: chmod +x startup.sh
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+    - name: Execute `startup.sh` to Install Playwright Browsers
+      run: ./startup.sh
 
-      # Optional: Add step to run tests here
+    - name: Verify Playwright Installation
+      run: |
+        python -c "from playwright.sync_api import sync_playwright; print('Playwright is working!' if sync_playwright() else 'Failed')"
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+    - name: Package `.playwright-browsers` for Deployment
+      run: |
+        mkdir -p ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers
+        cp -r /home/runner/.playwright-browsers/* ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers/
+        echo "Packaged Playwright Browsers."
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            release.zip
-            !venv/
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-
-      - name: Unzip artifact for deployment
-        run: unzip release.zip     
-        
-      - name: 'Deploy to Azure Functions'
-        uses: Azure/functions-action@v1
-        id: deploy-to-function
-        with:
-          app-name: 'Lead-Gerarator-UAT'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_5AED830D9F4A460397BA9ECCE14CE145 }}
-          sku: 'flexconsumption'
+    - name: 'Run Azure Functions Action'
+      uses: Azure/functions-action@v1
+      id: fa
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
         
