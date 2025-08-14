@@ -18,7 +18,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: UAT
+    environment: main
 
     steps:
     - name: 'Checkout GitHub Action'
@@ -93,3 +93,4 @@ jobs:
         scm-do-build-during-deployment: true
         enable-oryx-build: true
         
+
