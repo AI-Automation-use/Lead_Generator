@@ -82,15 +82,15 @@ def download_excel_from_blob(blob_service_client, container_name, blob_name):
         print(f"Error downloading blob {blob_name}: {e}")
         return None
 
-def upload_excel_to_blob(blob_service_client, container_name, blob_name, data):
-    # ... (your existing code)
-    try:
-        container_client = blob_service_client.get_container_client(container_name)
-        blob_client = container_client.get_blob_client(blob_name)
-        blob_client.upload_blob(data, overwrite=True)
-        print(f"Successfully uploaded {blob_name} to blob storage.")
-    except Exception as e:
-        print(f"Error uploading blob {blob_name}: {e}")
+# def upload_excel_to_blob(blob_service_client, container_name, blob_name, data):
+#     # ... (your existing code)
+#     try:
+#         container_client = blob_service_client.get_container_client(container_name)
+#         blob_client = container_client.get_blob_client(blob_name)
+#         blob_client.upload_blob(data, overwrite=True)
+#         print(f"Successfully uploaded {blob_name} to blob storage.")
+#     except Exception as e:
+#         print(f"Error uploading blob {blob_name}: {e}")
 
 def get_identified_leads_df():
     # ... (your existing code)
@@ -210,17 +210,46 @@ def scrape_google_news(company_name, pages=3):
         browser.close()
     return results
 
-def create_lead_docx(lead_analysis: str, company: str) -> str:
-    # ... (your existing code)
+# def create_lead_docx(lead_analysis: str, company: str) -> str:
+#     # ... (your existing code)
+#     doc = Document()
+#     doc.add_heading(f"Lead Analysis for {company}", 0)
+#     doc.add_paragraph(lead_analysis)
+#     filename = f"{company}_lead_analysis.docx"
+#     doc.save(filename)
+#     return filename
+
+# def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str) -> str:
+#     # ... (your existing code)
+#     doc = Document()
+#     doc.add_heading("Company Content and Analysis", 0)
+#     doc.add_heading("Company Website Content:", level=1)
+#     doc.add_paragraph(website_content)
+#     doc.add_heading("Company LinkedIn Profile Content:", level=1)
+#     doc.add_paragraph(linkedin_content)
+#     doc.add_heading("Recent News Articles:", level=1)
+#     doc.add_paragraph(news_content)
+#     filename = f"{company}_full_content.docx"
+#     doc.save(filename)
+#     return filename
+
+
+# Create a temporary BytesIO stream to save the docx content to memory
+def create_lead_docx(lead_analysis: str, company: str):
     doc = Document()
     doc.add_heading(f"Lead Analysis for {company}", 0)
     doc.add_paragraph(lead_analysis)
+    
+    # Save the document to an in-memory stream
+    doc_stream = io.BytesIO()
+    doc.save(doc_stream)
+    doc_stream.seek(0)
+    
     filename = f"{company}_lead_analysis.docx"
-    doc.save(filename)
-    return filename
+    return filename, doc_stream
 
-def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str) -> str:
-    # ... (your existing code)
+# Create a temporary BytesIO stream to save the docx content to memory
+def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str):
     doc = Document()
     doc.add_heading("Company Content and Analysis", 0)
     doc.add_heading("Company Website Content:", level=1)
@@ -229,10 +258,24 @@ def create_full_docx(website_content: str, linkedin_content: str, news_content: 
     doc.add_paragraph(linkedin_content)
     doc.add_heading("Recent News Articles:", level=1)
     doc.add_paragraph(news_content)
+    
+    # Save the document to an in-memory stream
+    doc_stream = io.BytesIO()
+    doc.save(doc_stream)
+    doc_stream.seek(0)
+    
     filename = f"{company}_full_content.docx"
-    doc.save(filename)
-    return filename
+    return filename, doc_stream
 
+# New function to upload an in-memory stream to Azure Blob Storage
+def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_stream):
+    try:
+        container_client = blob_service_client.get_container_client(container_name)
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(data_stream, overwrite=True)
+        print(f"Successfully uploaded {blob_name} to blob storage.")
+    except Exception as e:
+        print(f"Error uploading blob {blob_name}: {e}")
 def get_access_token():
     # ... (your existing code)
     print("🔐 Acquiring access token...")
@@ -589,3 +632,4 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
+
