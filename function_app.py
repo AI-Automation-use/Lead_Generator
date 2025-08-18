@@ -460,7 +460,7 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
     logging.info('Python timer trigger function executed at %s', utc_timestamp)
 
     # 1) Fixed inputs
-    company = "Computa Centre"
+    company = "Computacenter"
     pages = 1
 
     # 2) Fetch GNews API articles
@@ -586,5 +586,6 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
             logging.info(f"No new lead areas for '{company}'; no email sent.")
     else:
         logging.info(f"'{company}' is not identified as a potential lead; skipping email.")
+
 
     logging.info("Lead generation run completed.")
