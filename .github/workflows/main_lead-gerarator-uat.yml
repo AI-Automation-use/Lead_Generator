@@ -71,16 +71,17 @@ jobs:
       run: |
         echo "Installing Python dependencies and Playwright browsers..."
         
-        # Upgrade pip
-        python -m pip install --upgrade pip
-        
         # Install all Python dependencies, including playwright, into the designated folder
-        pip install -r requirements.txt --target="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages"
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt --target="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages"
 
         # Set environment variable to ensure browsers are installed to the correct, deployed folder
         export PLAYWRIGHT_BROWSERS_PATH="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers"
+        
+        # Add the Python packages directory to the PYTHONPATH so the `playwright` module can be found
+        export PYTHONPATH="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages:$PYTHONPATH"
 
-        # Install Playwright browsers for the Linux environment
+        # Now, install Playwright browsers for the Linux environment
         python -m playwright install --with-deps chromium
         
         echo "Playwright browsers installed to: $PLAYWRIGHT_BROWSERS_PATH"
@@ -97,3 +98,4 @@ jobs:
         # Crucial: Set these to false because we pre-packaged everything above
         scm-do-build-during-deployment: false
         enable-oryx-build: false
+
