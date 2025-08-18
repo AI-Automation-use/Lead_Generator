@@ -296,7 +296,7 @@ def get_access_token():
 
 # def get_access_token():
 #     # ... (your existing code)
-#     print("🔐 Acquiring access token...")
+#     logging.info("🔐 Acquiring access token...")
 #     token_cache = msal.SerializableTokenCache()
 #     if os.path.exists(TOKEN_FILE):
 #         try:
@@ -511,7 +511,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 
 @app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False)
-def Computacenter(myTimer: func.TimerRequest) -> None:
+def timer_trigger(myTimer: func.TimerRequest) -> None:
     # Your main logic, exactly as you wrote it
     utc_timestamp = datetime.utcnow()
     
@@ -650,6 +650,7 @@ def Computacenter(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
+
 
 
 
