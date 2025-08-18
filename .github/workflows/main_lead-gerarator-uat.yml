@@ -3,11 +3,11 @@ name: Deploy Python project to Azure Function App
 on:
   push:
     branches:
-      - main
+      - main  # Deploy only when pushing to the 'main' branch
 
 env:
   AZURE_FUNCTIONAPP_NAME: 'Lead-Gerarator-UAT'
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # Path to your function app project
   PYTHON_VERSION: '3.11'
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: main
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout
 
     steps:
     - name: 'Checkout GitHub Action'
@@ -65,17 +65,22 @@ jobs:
           libxrandr2 \
           libgbm1 \
           libasound2t64
+
     - name: Install Python Dependencies and Playwright Browsers
       shell: bash
       run: |
         echo "Installing Python dependencies and Playwright browsers..."
         
+        # Upgrade pip
         python -m pip install --upgrade pip
         
+        # Install all Python dependencies, including playwright, into the designated folder
         pip install -r requirements.txt --target="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages"
-        
+
+        # Set environment variable to ensure browsers are installed to the correct, deployed folder
         export PLAYWRIGHT_BROWSERS_PATH="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers"
 
+        # Install Playwright browsers for the Linux environment
         python -m playwright install --with-deps chromium
         
         echo "Playwright browsers installed to: $PLAYWRIGHT_BROWSERS_PATH"
@@ -89,8 +94,6 @@ jobs:
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_5AED830D9F4A460397BA9ECCE14CE145 }}
         sku: 'flexconsumption'
+        # Crucial: Set these to false because we pre-packaged everything above
         scm-do-build-during-deployment: false
         enable-oryx-build: false
-
-
-
