@@ -1,4 +1,5 @@
 azure-functions
+azure-identity
 requests
 beautifulsoup4
 playwright
@@ -15,4 +16,5 @@ openai
 python-docx
 azure-storage-blob
 openpyxl
+
 
