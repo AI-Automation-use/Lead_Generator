@@ -277,55 +277,55 @@ def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_st
     except Exception as e:
         print(f"Error uploading blob {blob_name}: {e}")
 
-from azure.identity import DefaultAzureCredential
+# from azure.identity import DefaultAzureCredential
 
-# New get_access_token function for Managed Identity
-def get_access_token():
-    logging.info("🔐 Acquiring access token using Managed Identity...")
-    try:
-        # DefaultAzureCredential automatically handles Managed Identity
-        credential = DefaultAzureCredential()
-        # The scope for Microsoft Graph
-        scope = "https://graph.microsoft.com/.default"
-        token = credential.get_token(scope)
-        logging.info("✅ Successfully acquired token via Managed Identity.")
-        return token.token
-    except Exception as e:
-        logging.error(f"❌ Failed to acquire token with Managed Identity: {e}")
-        raise
-
+# # New get_access_token function for Managed Identity
 # def get_access_token():
-#     # ... (your existing code)
-#     logging.info("🔐 Acquiring access token...")
-#     token_cache = msal.SerializableTokenCache()
-#     if os.path.exists(TOKEN_FILE):
-#         try:
-#             with open(TOKEN_FILE, "r") as f:
-#                 token_cache.deserialize(f.read())
-#             print("✅ Loaded token from local cache.")
-#         except Exception as e:
-#             print(f"⚠️ Failed to load token cache: {e}")
-#     app = msal.PublicClientApplication(
-#         client_id=CLIENT_ID,
-#         authority=f"https://login.microsoftonline.com/{TENANT_ID}",
-#         token_cache=token_cache
-#     )
-#     accounts = app.get_accounts()
-#     result = app.acquire_token_silent(SCOPES, account=accounts[0]) if accounts else None
-#     if not result:
-#         flow = app.initiate_device_flow(scopes=SCOPES)
-#         if "message" in flow:
-#             print(flow["message"])
-#         else:
-#             raise Exception("❌ Failed to initiate device flow.")
-#         result = app.acquire_token_by_device_flow(flow)
-#     if token_cache.has_state_changed:
-#         with open(TOKEN_FILE, "w") as f:
-#             f.write(token_cache.serialize())
-#         print("💾 Token cache updated and saved locally.")
-#     if "access_token" not in result:
-#         raise Exception(f"❌ Token acquisition failed: {result.get('error_description')}")
-#     return result["access_token"]
+#     logging.info("🔐 Acquiring access token using Managed Identity...")
+#     try:
+#         # DefaultAzureCredential automatically handles Managed Identity
+#         credential = DefaultAzureCredential()
+#         # The scope for Microsoft Graph
+#         scope = "https://graph.microsoft.com/.default"
+#         token = credential.get_token(scope)
+#         logging.info("✅ Successfully acquired token via Managed Identity.")
+#         return token.token
+#     except Exception as e:
+#         logging.error(f"❌ Failed to acquire token with Managed Identity: {e}")
+#         raise
+
+def get_access_token():
+    # ... (your existing code)
+    logging.info("🔐 Acquiring access token...")
+    token_cache = msal.SerializableTokenCache()
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, "r") as f:
+                token_cache.deserialize(f.read())
+            print("✅ Loaded token from local cache.")
+        except Exception as e:
+            print(f"⚠️ Failed to load token cache: {e}")
+    app = msal.PublicClientApplication(
+        client_id=CLIENT_ID,
+        authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+        token_cache=token_cache
+    )
+    accounts = app.get_accounts()
+    result = app.acquire_token_silent(SCOPES, account=accounts[0]) if accounts else None
+    if not result:
+        flow = app.initiate_device_flow(scopes=SCOPES)
+        if "message" in flow:
+            print(flow["message"])
+        else:
+            raise Exception("❌ Failed to initiate device flow.")
+        result = app.acquire_token_by_device_flow(flow)
+    if token_cache.has_state_changed:
+        with open(TOKEN_FILE, "w") as f:
+            f.write(token_cache.serialize())
+        print("💾 Token cache updated and saved locally.")
+    if "access_token" not in result:
+        raise Exception(f"❌ Token acquisition failed: {result.get('error_description')}")
+    return result["access_token"]
 
 def get_company_website(company_name, api_key, cx):
     # ... (your existing code)
@@ -650,6 +650,7 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
+
 
 
 
