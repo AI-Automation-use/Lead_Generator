@@ -86,5 +86,7 @@ jobs:
         app-name: 'VarianceAnalysisBackend'
         slot-name: 'Production'
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_2343EF2BA9EF4DD48A3E6F0C9AAB702D }}
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
 
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_2343EF2BA9EF4DD48A3E6F0C9AAB702D }}
