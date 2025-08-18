@@ -30,16 +30,41 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          # Essential system dependencies for Playwright to run headless browsers
-          libwoff1 libvpx9 libopus0 libgstreamer-plugins-base1.0-0 \
-          libgstreamer1.0-0 libharfbuzz-icu0 libhyphen0 libmanette-0.2-0 \
-          libflite1 libsecret-1-0 libavif16 libgl1-mesa-dri libegl1 \
-          libgles2 libevent-2.1-7 libgtk-4-1 libgraphene-1.0-0 \
-          libgstreamer-gl1.0-0 libgstreamer-plugins-bad1.0-0 libx264-dev \
-          libnspr4 libnss3 libdbus-glib-1-2 libpango-1.0-0 libpangocairo-1.0-0 \
-          libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 libxdamage1 \
-          libxfixes3 libxrandr2 libgbm1 libasound2t64
-
+          libwoff1 \
+          libvpx9 \
+          libopus0 \
+          libgstreamer-plugins-base1.0-0 \
+          libgstreamer1.0-0 \
+          libharfbuzz-icu0 \
+          libhyphen0 \
+          libmanette-0.2-0 \
+          libflite1 \
+          libsecret-1-0 \
+          libavif16 \
+          libgl1-mesa-dri \
+          libegl1 \
+          libgles2 \
+          libevent-2.1-7 \
+          libgtk-4-1 \
+          libgraphene-1.0-0 \
+          libgstreamer-gl1.0-0 \
+          libgstreamer-plugins-bad1.0-0 \
+          libx264-dev \
+          libnspr4 \
+          libnss3 \
+          libdbus-glib-1-2 \
+          libpango-1.0-0 \
+          libpangocairo-1.0-0 \
+          libatk1.0-0 \
+          libatk-bridge2.0-0 \
+          libcups2 \
+          libdrm2 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxfixes3 \
+          libxrandr2 \
+          libgbm1 \
+          libasound2t64
     - name: Install Python Dependencies and Playwright Browsers
       shell: bash
       run: |
@@ -66,5 +91,6 @@ jobs:
         sku: 'flexconsumption'
         scm-do-build-during-deployment: false
         enable-oryx-build: false
+
 
 
