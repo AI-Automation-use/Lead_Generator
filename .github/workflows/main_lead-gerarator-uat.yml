@@ -14,9 +14,6 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment: main
-    permissions:
-      contents: read # Required for actions/checkout
-
     steps:
     - name: 'Checkout GitHub Action'
       uses: actions/checkout@v4
@@ -49,53 +46,44 @@ jobs:
           libgraphene-1.0-0 \
           libgstreamer-gl1.0-0 \
           libgstreamer-plugins-bad1.0-0 \
-          libx264-dev \
-          libnspr4 \
-          libnss3 \
-          libdbus-glib-1-2 \
-          libpango-1.0-0 \
-          libpangocairo-1.0-0 \
-          libatk1.0-0 \
-          libatk-bridge2.0-0 \
-          libcups2 \
-          libdrm2 \
-          libxcomposite1 \
-          libxdamage1 \
-          libxfixes3 \
-          libxrandr2 \
-          libgbm1 \
-          libasound2t64
+          libx264-dev
 
-    - name: Install Python Dependencies and Playwright Browsers
+    - name: Install Python Dependencies
       shell: bash
       run: |
-        echo "Installing Python dependencies and Playwright browsers..."
-        
-        # Install all Python dependencies, including playwright, into the designated folder
         python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt --target="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages"
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
-        # Set environment variable to ensure browsers are installed to the correct, deployed folder
-        export PLAYWRIGHT_BROWSERS_PATH="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers"
-        
-        # Add the Python packages directory to the PYTHONPATH so the `playwright` module can be found
-        export PYTHONPATH="${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.python_packages/lib/site-packages:$PYTHONPATH"
+    - name: Install Playwright (Python)
+      run: |
+        python -m pip install playwright
+        echo "Playwright Installed."
 
-        # Now, install Playwright browsers for the Linux environment
-        python -m playwright install --with-deps chromium
-        
-        echo "Playwright browsers installed to: $PLAYWRIGHT_BROWSERS_PATH"
+    - name: Make `startup.sh` Executable
+      run: chmod +x startup.sh
+
+    - name: Execute `startup.sh` to Install Playwright Browsers
+      run: ./startup.sh
+
+    - name: Verify Playwright Installation
+      run: |
+        python -c "from playwright.sync_api import sync_playwright; print('Playwright is working!' if sync_playwright() else 'Failed')"
+
+    - name: Package `.playwright-browsers` for Deployment
+      run: |
+        mkdir -p ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers
+        cp -r /home/runner/.playwright-browsers/* ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers/
+        echo "Packaged Playwright Browsers."
 
     - name: 'Deploy to Azure Functions'
       uses: Azure/functions-action@v1
-      id: deploy-to-function
+      id: fa
       with:
-        app-name: 'Lead-Gerarator-UAT'
-        slot-name: 'Production'
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_5AED830D9F4A460397BA9ECCE14CE145 }}
         sku: 'flexconsumption'
-        # Crucial: Set these to false because we pre-packaged everything above
-        scm-do-build-during-deployment: false
-        enable-oryx-build: false
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
+
 
