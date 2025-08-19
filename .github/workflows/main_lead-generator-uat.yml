@@ -83,9 +83,10 @@ jobs:
       uses: Azure/functions-action@v1
       id: deploy-to-function
       with:
-        app-name: 'VarianceAnalysisBackend'
+        app-name: 'Lead-Generator-UAT'
         slot-name: 'Production'
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B93FEA363B8E47CF94F647402FA20AAC }}
         scm-do-build-during-deployment: true
         enable-oryx-build: true
+
