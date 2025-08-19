@@ -233,39 +233,39 @@ def scrape_google_news(company_name, pages=3):
 #     doc.save(filename)
 #     return filename
 
+#before email it is working
+# # Create a temporary BytesIO stream to save the docx content to memory
+# def create_lead_docx(lead_analysis: str, company: str):
+#     doc = Document()
+#     doc.add_heading(f"Lead Analysis for {company}", 0)
+#     doc.add_paragraph(lead_analysis)
+    
+#     # Save the document to an in-memory stream
+#     doc_stream = io.BytesIO()
+#     doc.save(doc_stream)
+#     doc_stream.seek(0)
+    
+#     filename = f"{company}_lead_analysis.docx"
+#     return filename, doc_stream
 
-# Create a temporary BytesIO stream to save the docx content to memory
-def create_lead_docx(lead_analysis: str, company: str):
-    doc = Document()
-    doc.add_heading(f"Lead Analysis for {company}", 0)
-    doc.add_paragraph(lead_analysis)
+# # Create a temporary BytesIO stream to save the docx content to memory
+# def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str):
+#     doc = Document()
+#     doc.add_heading("Company Content and Analysis", 0)
+#     doc.add_heading("Company Website Content:", level=1)
+#     doc.add_paragraph(website_content)
+#     doc.add_heading("Company LinkedIn Profile Content:", level=1)
+#     doc.add_paragraph(linkedin_content)
+#     doc.add_heading("Recent News Articles:", level=1)
+#     doc.add_paragraph(news_content)
     
-    # Save the document to an in-memory stream
-    doc_stream = io.BytesIO()
-    doc.save(doc_stream)
-    doc_stream.seek(0)
+#     # Save the document to an in-memory stream
+#     doc_stream = io.BytesIO()
+#     doc.save(doc_stream)
+#     doc_stream.seek(0)
     
-    filename = f"{company}_lead_analysis.docx"
-    return filename, doc_stream
-
-# Create a temporary BytesIO stream to save the docx content to memory
-def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str):
-    doc = Document()
-    doc.add_heading("Company Content and Analysis", 0)
-    doc.add_heading("Company Website Content:", level=1)
-    doc.add_paragraph(website_content)
-    doc.add_heading("Company LinkedIn Profile Content:", level=1)
-    doc.add_paragraph(linkedin_content)
-    doc.add_heading("Recent News Articles:", level=1)
-    doc.add_paragraph(news_content)
-    
-    # Save the document to an in-memory stream
-    doc_stream = io.BytesIO()
-    doc.save(doc_stream)
-    doc_stream.seek(0)
-    
-    filename = f"{company}_full_content.docx"
-    return filename, doc_stream
+#     filename = f"{company}_full_content.docx"
+#     return filename, doc_stream
 
 # New function to upload an in-memory stream to Azure Blob Storage
 def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_stream):
@@ -518,9 +518,82 @@ def extract_lead_details(lead_analysis, company):
     )
     extracted = response.choices[0].message.content.strip()
     return extracted
+    
+#before mail sending it is working
+# def send_email(access_token, recipient_emails, subject, body, attachment_paths=None):
+#     # ... (your existing code)
+#     headers = {
+#         "Authorization": f"Bearer {access_token}",
+#         "Content-Type": "application/json"
+#     }
+#     to_recipients = [{"emailAddress": {"address": mail}} for mail in recipient_emails]
+#     message = {
+#         "message": {
+#             "subject": subject,
+#             "body": {"contentType": "HTML", "content": body},
+#             "toRecipients": to_recipients,
+#             "attachments": []
+#         }
+#     }
+#     if attachment_paths:
+#         for path in attachment_paths:
+#             with open(path, "rb") as f:
+#                 data = f.read()
+#             encoded = base64.b64encode(data).decode("utf-8")
+#             message["message"]["attachments"].append({
+#                 "@odata.type": "#microsoft.graph.fileAttachment",
+#                 "name": os.path.basename(path),
+#                 "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+#                 "contentBytes": encoded
+#             })
+#     resp = requests.post(
+#         f"{GRAPH_API_ENDPOINT}/me/sendMail",
+#         headers=headers,
+#         json=message
+#     )
+#     if resp.status_code == 202:
+#         print("✅ Email with attachments sent!")
+#         return True
+#     else:
+#         print("❌ Failed to send:", resp.status_code, resp.text)
+#         return False
 
-def send_email(access_token, recipient_emails, subject, body, attachment_paths=None):
-    # ... (your existing code)
+# --- REVISED ATTACHMENT FUNCTIONS ---
+from io import BytesIO
+import base64
+import os
+from docx import Document
+
+def create_lead_docx(lead_analysis: str, company: str):
+    doc = Document()
+    doc.add_heading(f"Lead Analysis for {company}", 0)
+    doc.add_paragraph(lead_analysis)
+    
+    doc_stream = BytesIO()
+    doc.save(doc_stream)
+    doc_stream.seek(0)
+    
+    filename = f"{company}_lead_analysis.docx"
+    return filename, doc_stream
+
+def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str):
+    doc = Document()
+    doc.add_heading("Company Content and Analysis", 0)
+    doc.add_heading("Company Website Content:", level=1)
+    doc.add_paragraph(website_content)
+    doc.add_heading("Company LinkedIn Profile Content:", level=1)
+    doc.add_paragraph(linkedin_content)
+    doc.add_heading("Recent News Articles:", level=1)
+    doc.add_paragraph(news_content)
+    
+    doc_stream = BytesIO()
+    doc.save(doc_stream)
+    doc_stream.seek(0)
+    
+    filename = f"{company}_full_content.docx"
+    return filename, doc_stream
+
+def send_email(access_token, recipient_emails, subject, body, attachments=None):
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
@@ -534,28 +607,29 @@ def send_email(access_token, recipient_emails, subject, body, attachment_paths=N
             "attachments": []
         }
     }
-    if attachment_paths:
-        for path in attachment_paths:
-            with open(path, "rb") as f:
-                data = f.read()
-            encoded = base64.b64encode(data).decode("utf-8")
+    
+    if attachments:
+        for name, data_stream in attachments:
+            encoded_content = base64.b64encode(data_stream.read()).decode("utf-8")
             message["message"]["attachments"].append({
                 "@odata.type": "#microsoft.graph.fileAttachment",
-                "name": os.path.basename(path),
+                "name": name,
                 "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "contentBytes": encoded
+                "contentBytes": encoded_content
             })
+    
     resp = requests.post(
         f"{GRAPH_API_ENDPOINT}/me/sendMail",
         headers=headers,
         json=message
     )
     if resp.status_code == 202:
-        print("✅ Email with attachments sent!")
+        logging.info("✅ Email with attachments sent!")
         return True
     else:
-        print("❌ Failed to send:", resp.status_code, resp.text)
+        logging.error(f"❌ Failed to send: {resp.status_code} - {resp.text}")
         return False
+
 
 def markdown_bold_to_html(text):
     # ... (your existing code)
@@ -667,9 +741,9 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
             email_flag = False
 
         if email_flag:
-            # Create DOCX attachments
-            lead_doc = create_lead_docx(lead_analysis, company)
-            full_doc = create_full_docx(
+            # Create DOCX attachments as in-memory streams
+            lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+            full_doc_name, full_doc_stream = create_full_docx(
                 website_content, linkedin_content, news_content, company
             )
 
@@ -693,7 +767,8 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
                     ["vishnu.kg@sonata-software.com"],
                     f"Potential Lead Identified – {company}",
                     email_body,
-                    [lead_doc, full_doc]
+                    # Pass the in-memory streams to the send_email function
+                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
                 )
                 logging.info("✅ Email sent with attachments." if sent else "❌ Email send failed.")
             except Exception as e:
@@ -705,6 +780,7 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
+
 
 
 
