@@ -294,37 +294,92 @@ def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_st
 #         logging.error(f"❌ Failed to acquire token with Managed Identity: {e}")
 #         raise
 
+# def get_access_token():
+#     # ... (your existing code)
+#     logging.info("🔐 Acquiring access token...")
+#     token_cache = msal.SerializableTokenCache()
+#     if os.path.exists(TOKEN_FILE):
+#         try:
+#             with open(TOKEN_FILE, "r") as f:
+#                 token_cache.deserialize(f.read())
+#             print("✅ Loaded token from local cache.")
+#         except Exception as e:
+#             print(f"⚠️ Failed to load token cache: {e}")
+#     app = msal.PublicClientApplication(
+#         client_id=CLIENT_ID,
+#         authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+#         token_cache=token_cache
+#     )
+#     accounts = app.get_accounts()
+#     result = app.acquire_token_silent(SCOPES, account=accounts[0]) if accounts else None
+#     if not result:
+#         flow = app.initiate_device_flow(scopes=SCOPES)
+#         if "message" in flow:
+#             print(flow["message"])
+#         else:
+#             raise Exception("❌ Failed to initiate device flow.")
+#         result = app.acquire_token_by_device_flow(flow)
+#     if token_cache.has_state_changed:
+#         with open(TOKEN_FILE, "w") as f:
+#             f.write(token_cache.serialize())
+#         print("💾 Token cache updated and saved locally.")
+#     if "access_token" not in result:
+#         raise Exception(f"❌ Token acquisition failed: {result.get('error_description')}")
+#     return result["access_token"]
+
+from azure.identity import DefaultAzureCredential
+# Constants for Blob Storage
+TOKEN_CONTAINER_NAME = "potentiallist"
+TOKEN_BLOB_NAME = "token.json"
+SCOPES = ["https://graph.microsoft.com/.default"] # Use the .default scope for client credential flow
+
 def get_access_token():
-    # ... (your existing code)
     logging.info("🔐 Acquiring access token...")
     token_cache = msal.SerializableTokenCache()
-    if os.path.exists(TOKEN_FILE):
-        try:
-            with open(TOKEN_FILE, "r") as f:
-                token_cache.deserialize(f.read())
-            print("✅ Loaded token from local cache.")
-        except Exception as e:
-            print(f"⚠️ Failed to load token cache: {e}")
+    blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
+    
+    # 1. Download the token cache from blob storage
+    try:
+        container_client = blob_service_client.get_container_client(TOKEN_CONTAINER_NAME)
+        blob_client = container_client.get_blob_client(TOKEN_BLOB_NAME)
+        download_stream = blob_client.download_blob()
+        token_cache.deserialize(download_stream.readall().decode('utf-8'))
+        logging.info("✅ Loaded token from blob storage cache.")
+    except Exception as e:
+        logging.warning(f"⚠️ Failed to load token cache from blob. Initial authentication may be required: {e}")
+        # Note: This is where a local interactive session is needed to create the initial token.json.
+        # This code block will fail in a deployed Function App.
+        # It's here for local testing only. After initial setup, the 'accounts' check below handles it.
+    
     app = msal.PublicClientApplication(
-        client_id=CLIENT_ID,
-        authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+        client_id=os.getenv("CLIENT_ID"),
+        authority=f"https://login.microsoftonline.com/{os.getenv('TENANT_ID')}",
         token_cache=token_cache
     )
+    
     accounts = app.get_accounts()
+    
+    # Use the refresh token from the cache (downloaded from blob)
     result = app.acquire_token_silent(SCOPES, account=accounts[0]) if accounts else None
+    
+    # If a silent token acquisition fails, it means the refresh token is expired or not present.
+    # In a deployed function, this should NOT happen if the refresh token is valid.
     if not result:
-        flow = app.initiate_device_flow(scopes=SCOPES)
-        if "message" in flow:
-            print(flow["message"])
-        else:
-            raise Exception("❌ Failed to initiate device flow.")
-        result = app.acquire_token_by_device_flow(flow)
+        raise Exception("❌ Token acquisition failed silently. Refresh token may be invalid. Manual re-authentication is required.")
+        
     if token_cache.has_state_changed:
-        with open(TOKEN_FILE, "w") as f:
-            f.write(token_cache.serialize())
-        print("💾 Token cache updated and saved locally.")
+        # 2. Upload the updated token cache back to blob storage
+        try:
+            container_client = blob_service_client.get_container_client(TOKEN_CONTAINER_NAME)
+            blob_client = container_client.get_blob_client(TOKEN_BLOB_NAME)
+            blob_client.upload_blob(token_cache.serialize(), overwrite=True)
+            logging.info("💾 Token cache updated and saved to blob storage.")
+        except Exception as e:
+            logging.error(f"❌ Failed to upload token cache to blob: {e}")
+            
     if "access_token" not in result:
         raise Exception(f"❌ Token acquisition failed: {result.get('error_description')}")
+        
     return result["access_token"]
 
 def get_company_website(company_name, api_key, cx):
@@ -650,6 +705,7 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
+
 
 
 
