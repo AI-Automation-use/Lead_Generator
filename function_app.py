@@ -635,6 +635,35 @@ def markdown_bold_to_html(text):
     # ... (your existing code)
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
 
+def send_lead_data_to_api(lead_areas, account_name, lead_name):
+    """
+    Sends identified lead data to the external API, assuming it only needs the 3 fields.
+    """
+    api_url = os.getenv("LEAD_API_URL")
+    
+    if not api_url:
+        logging.error("Error: 'LEAD_API_URL' environment variable not found.")
+        return False
+
+    data = {
+        "new_leadidentificationarea": lead_areas, # This comes from your AI analysis
+        "new_name": lead_name,
+        "new_accountname": account_name
+    }
+
+    try:
+        logging.info("Attempting to send simplified lead data to API...")
+        response = requests.post(api_url, json=data)
+        response.raise_for_status() 
+        logging.info("✅ Simplified lead data successfully sent to API.")
+        return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"❌ Failed to send lead data to API: {e}")
+        if e.response is not None:
+             logging.error(f"Response content: {e.response.text}")
+        return False
+
+
 # The Function App and Timer Trigger decorator
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -649,9 +678,12 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
     
     logging.info('Python timer trigger function executed at %s', utc_timestamp)
 
+    
     # 1) Fixed inputs
     company = "Computacenter"
     pages = 1
+    my_account_name = "Computacenter India" 
+    my_lead_name = "Lead from Lead Generator Tool"
 
     # 2) Fetch GNews API articles
     today = datetime.utcnow()
@@ -773,6 +805,10 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
                 logging.info("✅ Email sent with attachments." if sent else "❌ Email send failed.")
             except Exception as e:
                 logging.error(f"Email send error: {e}")
+            # --- NEW STEP: CALL THE API FUNCTION ---
+            if sent:
+                send_lead_data_to_api(lead_areas, my_account_name, my_lead_name)
+                logging.info("Lead data successfully sent to external API.")
         else:
             logging.info(f"No new lead areas for '{company}'; no email sent.")
     else:
