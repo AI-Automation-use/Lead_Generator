@@ -1,4 +1,5 @@
 azure-functions
+requests
 azure-identity
 requests
 beautifulsoup4
