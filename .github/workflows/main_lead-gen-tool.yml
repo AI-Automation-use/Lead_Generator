@@ -15,59 +15,77 @@ env:
   PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read #This is required for actions/checkout
-
+    environment: main
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@v4
 
-      - name: Setup Python version
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create and start virtual environment
-        run: |
-          python -m venv venv
-          source venv/bin/activate
+    - name: Install system dependencies for Playwright
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwoff1 \
+          libvpx9 \
+          libopus0 \
+          libgstreamer-plugins-base1.0-0 \
+          libgstreamer1.0-0 \
+          libharfbuzz-icu0 \
+          libhyphen0 \
+          libmanette-0.2-0 \
+          libflite1 \
+          libsecret-1-0 \
+          libavif16 \
+          libgl1-mesa-dri \
+          libegl1 \
+          libgles2 \
+          libevent-2.1-7 \
+          libgtk-4-1 \
+          libgraphene-1.0-0 \
+          libgstreamer-gl1.0-0 \
+          libgstreamer-plugins-bad1.0-0 \
+          libx264-dev
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+    - name: Install Python Dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
-      # Optional: Add step to run tests here
+    - name: Install Playwright (Python)
+      run: |
+        python -m pip install playwright
+        echo "Playwright Installed."
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+    - name: Make `startup.sh` Executable
+      run: chmod +x startup.sh
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            release.zip
-            !venv/
+    - name: Execute `startup.sh` to Install Playwright Browsers
+      run: ./startup.sh
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
+    - name: Verify Playwright Installation
+      run: |
+        python -c "from playwright.sync_api import sync_playwright; print('Playwright is working!' if sync_playwright() else 'Failed')"
 
-      - name: Unzip artifact for deployment
-        run: unzip release.zip     
+    - name: Package `.playwright-browsers` for Deployment
+      run: |
+        mkdir -p ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers
+        cp -r /home/runner/.playwright-browsers/* ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/.playwright-browsers/
+        echo "Packaged Playwright Browsers."
         
-      - name: 'Deploy to Azure Functions'
-        uses: Azure/functions-action@v1
-        id: deploy-to-function
-        with:
-          app-name: 'Lead-Gen-Tool'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_36C7CD39ECD443E0A7048AAEE952E01C }}
+    - name: 'Deploy to Azure Functions'
+      uses: Azure/functions-action@v1
+      id: deploy-to-function
+      with:
+        app-name: 'Lead-Generator-UAT'
+        slot-name: 'Production'
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_36C7CD39ECD443E0A7048AAEE952E01C }}
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
