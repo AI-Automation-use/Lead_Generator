@@ -2,11 +2,12 @@
   "scriptFile": "__init__.py",
   "bindings": [
     {
-      "name": "computacenter",
+      "name": "myTimer",
       "type": "timerTrigger",
       "direction": "in",
       "schedule": "0 */5 * * * *"
     }
   ],
-  "entryPoint": "timer_trigger"
+  "entryPoint": "main"
 }
+
