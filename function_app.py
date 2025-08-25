@@ -20,10 +20,8 @@ import re
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from io import BytesIO
 import io
+from azure.identity import DefaultAzureCredential
 
-# Load environment variables from the .env file
-# NOTE: In Azure Functions, these are loaded from "Application Settings," so this
-# line is mainly for local development.
 load_dotenv()
 
 # Constants for authentication
@@ -42,9 +40,7 @@ AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
 
 # Azure Blob Storage Configuration
-# AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-# LEAD_EXCEL_CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER_NAME")
-AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=leadgeneratoruat;AccountKey=RiP+k6mn9kflF1gdXPeUjQtisybeEJtEOfNj97+i/ml2imwl8vg74s7x1luYYAMZCYqjpQ/9OkVe+AStSViuWg==;EndpointSuffix=core.windows.net"
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 LEAD_EXCEL_CONTAINER_NAME="potentiallist"
 LEAD_EXCEL_BLOB_NAME = "leads_tracking.xlsx" 
 
@@ -64,15 +60,11 @@ if sys.platform == "win32":
 # GNews API Configuration for fetching news
 BASE_URL = "https://gnews.io/api/v4/search"
 
-# --- Azure Blob Storage Functions ---
-# ... (all your existing helper functions like get_blob_service_client, 
-# download_excel_from_blob, etc., go here)
 
 def get_blob_service_client():
     return BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
 
 def download_excel_from_blob(blob_service_client, container_name, blob_name):
-    # ... (your existing code)
     try:
         container_client = blob_service_client.get_container_client(container_name)
         blob_client = container_client.get_blob_client(blob_name)
@@ -82,18 +74,7 @@ def download_excel_from_blob(blob_service_client, container_name, blob_name):
         print(f"Error downloading blob {blob_name}: {e}")
         return None
 
-# def upload_excel_to_blob(blob_service_client, container_name, blob_name, data):
-#     # ... (your existing code)
-#     try:
-#         container_client = blob_service_client.get_container_client(container_name)
-#         blob_client = container_client.get_blob_client(blob_name)
-#         blob_client.upload_blob(data, overwrite=True)
-#         print(f"Successfully uploaded {blob_name} to blob storage.")
-#     except Exception as e:
-#         print(f"Error uploading blob {blob_name}: {e}")
-
 def get_identified_leads_df():
-    # ... (your existing code)
     blob_service_client = get_blob_service_client()
     excel_data = download_excel_from_blob(blob_service_client, LEAD_EXCEL_CONTAINER_NAME, LEAD_EXCEL_BLOB_NAME)
     if excel_data:
@@ -107,7 +88,6 @@ def get_identified_leads_df():
         return pd.DataFrame(columns=["Company Name", "Lead Identification Areas", "Timestamp"])
 
 def normalize_areas_string(areas_str):
-    # ... (your existing code)
     if not isinstance(areas_str, str):
         return ""
     parts = areas_str.replace(';', ',').split(',')
@@ -115,7 +95,6 @@ def normalize_areas_string(areas_str):
     return ", ".join(cleaned_parts)
 
 def add_lead_to_excel(company_name, lead_areas):
-    # ... (your existing code)
     blob_service_client = get_blob_service_client()
     df = get_identified_leads_df()
     normalized_incoming_areas_str = normalize_areas_string(lead_areas)
@@ -157,7 +136,6 @@ def add_lead_to_excel(company_name, lead_areas):
     return email_should_be_sent
 
 def fetch_full_article_text_with_playwright(page, url):
-    # ... (your existing code)
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(3000)
@@ -168,8 +146,7 @@ def fetch_full_article_text_with_playwright(page, url):
         print(f"Error fetching full article from {url}: {e}")
         return "⚠️ Full article not available."
 
-def scrape_google_news(company_name, pages=3):
-    # ... (your existing code)
+def scrape_google_news(company_name, pages=1):
     query = quote(company_name)
     results = []
     with sync_playwright() as p:
@@ -210,64 +187,7 @@ def scrape_google_news(company_name, pages=3):
         browser.close()
     return results
 
-# def create_lead_docx(lead_analysis: str, company: str) -> str:
-#     # ... (your existing code)
-#     doc = Document()
-#     doc.add_heading(f"Lead Analysis for {company}", 0)
-#     doc.add_paragraph(lead_analysis)
-#     filename = f"{company}_lead_analysis.docx"
-#     doc.save(filename)
-#     return filename
 
-# def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str) -> str:
-#     # ... (your existing code)
-#     doc = Document()
-#     doc.add_heading("Company Content and Analysis", 0)
-#     doc.add_heading("Company Website Content:", level=1)
-#     doc.add_paragraph(website_content)
-#     doc.add_heading("Company LinkedIn Profile Content:", level=1)
-#     doc.add_paragraph(linkedin_content)
-#     doc.add_heading("Recent News Articles:", level=1)
-#     doc.add_paragraph(news_content)
-#     filename = f"{company}_full_content.docx"
-#     doc.save(filename)
-#     return filename
-
-#before email it is working
-# # Create a temporary BytesIO stream to save the docx content to memory
-# def create_lead_docx(lead_analysis: str, company: str):
-#     doc = Document()
-#     doc.add_heading(f"Lead Analysis for {company}", 0)
-#     doc.add_paragraph(lead_analysis)
-    
-#     # Save the document to an in-memory stream
-#     doc_stream = io.BytesIO()
-#     doc.save(doc_stream)
-#     doc_stream.seek(0)
-    
-#     filename = f"{company}_lead_analysis.docx"
-#     return filename, doc_stream
-
-# # Create a temporary BytesIO stream to save the docx content to memory
-# def create_full_docx(website_content: str, linkedin_content: str, news_content: str, company: str):
-#     doc = Document()
-#     doc.add_heading("Company Content and Analysis", 0)
-#     doc.add_heading("Company Website Content:", level=1)
-#     doc.add_paragraph(website_content)
-#     doc.add_heading("Company LinkedIn Profile Content:", level=1)
-#     doc.add_paragraph(linkedin_content)
-#     doc.add_heading("Recent News Articles:", level=1)
-#     doc.add_paragraph(news_content)
-    
-#     # Save the document to an in-memory stream
-#     doc_stream = io.BytesIO()
-#     doc.save(doc_stream)
-#     doc_stream.seek(0)
-    
-#     filename = f"{company}_full_content.docx"
-#     return filename, doc_stream
-
-# New function to upload an in-memory stream to Azure Blob Storage
 def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_stream):
     try:
         container_client = blob_service_client.get_container_client(container_name)
@@ -277,57 +197,7 @@ def upload_excel_to_blob(blob_service_client, container_name, blob_name, data_st
     except Exception as e:
         print(f"Error uploading blob {blob_name}: {e}")
 
-# from azure.identity import DefaultAzureCredential
 
-# # New get_access_token function for Managed Identity
-# def get_access_token():
-#     logging.info("🔐 Acquiring access token using Managed Identity...")
-#     try:
-#         # DefaultAzureCredential automatically handles Managed Identity
-#         credential = DefaultAzureCredential()
-#         # The scope for Microsoft Graph
-#         scope = "https://graph.microsoft.com/.default"
-#         token = credential.get_token(scope)
-#         logging.info("✅ Successfully acquired token via Managed Identity.")
-#         return token.token
-#     except Exception as e:
-#         logging.error(f"❌ Failed to acquire token with Managed Identity: {e}")
-#         raise
-
-# def get_access_token():
-#     # ... (your existing code)
-#     logging.info("🔐 Acquiring access token...")
-#     token_cache = msal.SerializableTokenCache()
-#     if os.path.exists(TOKEN_FILE):
-#         try:
-#             with open(TOKEN_FILE, "r") as f:
-#                 token_cache.deserialize(f.read())
-#             print("✅ Loaded token from local cache.")
-#         except Exception as e:
-#             print(f"⚠️ Failed to load token cache: {e}")
-#     app = msal.PublicClientApplication(
-#         client_id=CLIENT_ID,
-#         authority=f"https://login.microsoftonline.com/{TENANT_ID}",
-#         token_cache=token_cache
-#     )
-#     accounts = app.get_accounts()
-#     result = app.acquire_token_silent(SCOPES, account=accounts[0]) if accounts else None
-#     if not result:
-#         flow = app.initiate_device_flow(scopes=SCOPES)
-#         if "message" in flow:
-#             print(flow["message"])
-#         else:
-#             raise Exception("❌ Failed to initiate device flow.")
-#         result = app.acquire_token_by_device_flow(flow)
-#     if token_cache.has_state_changed:
-#         with open(TOKEN_FILE, "w") as f:
-#             f.write(token_cache.serialize())
-#         print("💾 Token cache updated and saved locally.")
-#     if "access_token" not in result:
-#         raise Exception(f"❌ Token acquisition failed: {result.get('error_description')}")
-#     return result["access_token"]
-
-from azure.identity import DefaultAzureCredential
 # Constants for Blob Storage
 TOKEN_CONTAINER_NAME = "potentiallist"
 TOKEN_BLOB_NAME = "token.json"
@@ -368,7 +238,6 @@ def get_access_token():
         raise Exception("❌ Token acquisition failed silently. Refresh token may be invalid. Manual re-authentication is required.")
         
     if token_cache.has_state_changed:
-        # 2. Upload the updated token cache back to blob storage
         try:
             container_client = blob_service_client.get_container_client(TOKEN_CONTAINER_NAME)
             blob_client = container_client.get_blob_client(TOKEN_BLOB_NAME)
@@ -383,7 +252,6 @@ def get_access_token():
     return result["access_token"]
 
 def get_company_website(company_name, api_key, cx):
-    # ... (your existing code)
     search_url = f"https://www.googleapis.com/customsearch/v1?q={company_name}+company+site&key={api_key}&cx={cx}"
     response = requests.get(search_url)
     if response.status_code == 200:
@@ -393,7 +261,6 @@ def get_company_website(company_name, api_key, cx):
     return None
 
 def scrape_website(website):
-    # ... (your existing code)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
@@ -423,7 +290,6 @@ def scrape_website(website):
         return full_content, website
 
 def check_potential_lead(website_content, linkedin_content, news_content):
-    # ... (your existing code)
     combined_content = f"""
     You are a market‑intelligence assistant.  
 
@@ -474,7 +340,6 @@ def check_potential_lead(website_content, linkedin_content, news_content):
     return lead_analysis, potential_lead_check
 
 def classify_lead(lead_analysis):
-    # ... (your existing code)
     prompt = f"""
     You are a proactive lead generation expert.
 
@@ -493,7 +358,6 @@ def classify_lead(lead_analysis):
     return result
 
 def extract_lead_details(lead_analysis, company):
-    # ... (your existing code)
     prompt = f"""
     Given the following lead analysis for the company "{company}", extract and return the following in plain text format:
     
@@ -518,51 +382,7 @@ def extract_lead_details(lead_analysis, company):
     )
     extracted = response.choices[0].message.content.strip()
     return extracted
-    
-#before mail sending it is working
-# def send_email(access_token, recipient_emails, subject, body, attachment_paths=None):
-#     # ... (your existing code)
-#     headers = {
-#         "Authorization": f"Bearer {access_token}",
-#         "Content-Type": "application/json"
-#     }
-#     to_recipients = [{"emailAddress": {"address": mail}} for mail in recipient_emails]
-#     message = {
-#         "message": {
-#             "subject": subject,
-#             "body": {"contentType": "HTML", "content": body},
-#             "toRecipients": to_recipients,
-#             "attachments": []
-#         }
-#     }
-#     if attachment_paths:
-#         for path in attachment_paths:
-#             with open(path, "rb") as f:
-#                 data = f.read()
-#             encoded = base64.b64encode(data).decode("utf-8")
-#             message["message"]["attachments"].append({
-#                 "@odata.type": "#microsoft.graph.fileAttachment",
-#                 "name": os.path.basename(path),
-#                 "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-#                 "contentBytes": encoded
-#             })
-#     resp = requests.post(
-#         f"{GRAPH_API_ENDPOINT}/me/sendMail",
-#         headers=headers,
-#         json=message
-#     )
-#     if resp.status_code == 202:
-#         print("✅ Email with attachments sent!")
-#         return True
-#     else:
-#         print("❌ Failed to send:", resp.status_code, resp.text)
-#         return False
 
-# --- REVISED ATTACHMENT FUNCTIONS ---
-from io import BytesIO
-import base64
-import os
-from docx import Document
 
 def create_lead_docx(lead_analysis: str, company: str):
     doc = Document()
@@ -632,7 +452,6 @@ def send_email(access_token, recipient_emails, subject, body, attachments=None):
 
 
 def markdown_bold_to_html(text):
-    # ... (your existing code)
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
 
 def send_lead_data_to_api(lead_areas, account_name, lead_name):
@@ -816,10 +635,3 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
     logging.info("Lead generation run completed.")
-
-
-
-
-
-
-
