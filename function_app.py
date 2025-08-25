@@ -487,10 +487,10 @@ def send_lead_data_to_api(lead_areas, account_name, lead_name):
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 TARGET_COMPANY = os.getenv("TARGET_COMPANY1")
 
-@app.timer_trigger(schedule="0 */5 * * * *", arg_name="computacenter", run_on_startup=False)
-def timer_trigger(computacenter: func.TimerRequest) -> None:
-# @app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False)
-# def timer_trigger(myTimer: func.TimerRequest) -> None:
+# @app.timer_trigger(schedule="0 */5 * * * *", arg_name="computacenter", run_on_startup=False)
+# def timer_trigger(computacenter: func.TimerRequest) -> None:
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False)
+def timer_trigger(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
     if myTimer.past_due:
@@ -793,6 +793,7 @@ def timer_trigger(computacenter: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
