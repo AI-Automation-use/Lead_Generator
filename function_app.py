@@ -485,6 +485,7 @@ def send_lead_data_to_api(lead_areas, account_name, lead_name):
 
 # The Function App and Timer Trigger decorator
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+TARGET_COMPANY = os.getenv("TARGET_COMPANY1")
 
 @app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False)
 def timer_trigger(myTimer: func.TimerRequest) -> None:
@@ -495,7 +496,7 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
     logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
 
-    company = "Computacenter"
+    company = TARGET_COMPANY
     pages = 1
     my_account_name = "Computacenter India"
     my_lead_name = "Lead from Lead Generator Tool"
@@ -790,4 +791,5 @@ def timer_trigger(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
