@@ -501,7 +501,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
 
     logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
 
-    company = TARGET_COMPANY
+    company = TARGET_COMPANY1
     pages = 1
     my_account_name = "Computacenter India"
     my_lead_name = "Lead from Lead Generator Tool"
@@ -657,7 +657,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
     logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
 
-    company = TARGET_COMPANY
+    company = TARGET_COMPANY2
     pages = 1
     my_account_name = "Computacenter India"
     my_lead_name = "Lead from Lead Generator Tool"
@@ -951,6 +951,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
