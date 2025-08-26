@@ -1,4 +1,5 @@
 {
+  "name": "Computacenter",
   "scriptFile": "__init__.py",
   "bindings": [
     {
@@ -10,4 +11,5 @@
   ],
   "entryPoint": "main"
 }
+
 
