@@ -1,26 +1,28 @@
 {
-  "name": "Computacenter",
-  "scriptFile": "__init__.py",
-  "bindings": [
-    {
-      "name": "myTimer",
-      "type": "timerTrigger",
-      "direction": "in",
-      "schedule": "0 */5 * * * *"
-    }
-  ],
-  "name": "PennyMac",
-  "scriptFile": "__init__.py",
-  "bindings": [
-    {
-      "name": "myTimer",
-      "type": "timerTrigger",
-      "direction": "in",
-      "schedule": "0 */7 * * * *"
-    }
-  ],
-  "entryPoint": "main"
+    "functions": [
+        {
+            "name": "ComputaCenter",
+            "scriptFile": "__init__.py",
+            "bindings": [
+                {
+                    "name": "myTimer",
+                    "type": "timerTrigger",
+                    "direction": "in",
+                    "schedule": "0 */5 * * * *"
+                }
+            ]
+        },
+        {
+            "name": "PennyMac",
+            "scriptFile": "__init__.py",
+            "bindings": [
+                {
+                    "name": "mytimer",
+                    "type": "timerTrigger",
+                    "direction": "in",
+                    "schedule": "0 */7 * * * *"
+                }
+            ]
+        }
+     ]
 }
-
-
-
