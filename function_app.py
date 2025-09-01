@@ -454,7 +454,14 @@ def send_email(access_token, recipient_emails, subject, body, attachments=None):
 def markdown_bold_to_html(text):
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
 
-def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, lead_doc_stream):
+# def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, lead_doc_stream):
+def send_lead_data_to_api(
+    lead_areas: str,
+    account_name: str,
+    lead_name: str,
+    lead_doc_name: str | None = None,
+    lead_doc_stream: bytes | None = None,
+) -> bool:
     """
     Sends identified lead data and the lead analysis file to the external API.
     """
@@ -468,7 +475,8 @@ def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, le
     data = {
         "new_leadidentificationarea": lead_areas,
         "new_name": lead_name,
-        "new_accountname": account_name
+        "new_accountname": account_name,
+        ('new_supportingdocuments', (lead_doc_name, io.BytesIO(lead_doc_stream), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
     }
 
     # The 'files' parameter handles multipart/form-data.
@@ -490,6 +498,44 @@ def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, le
         if e.response is not None:
             logging.error(f"Response content: {e.response.text}")
         return False
+
+# working when only data is sent attachment is pending through form-data
+# def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, lead_doc_stream):
+#     """
+#     Sends identified lead data and the lead analysis file to the external API.
+#     """
+#     api_url = os.getenv("LEAD_API_URL")
+
+#     if not api_url:
+#         logging.error("Error: 'LEAD_API_URL' environment variable not found.")
+#         return False
+
+#     # The data to be sent as part of the form
+#     data = {
+#         "new_leadidentificationarea": lead_areas,
+#         "new_name": lead_name,
+#         "new_accountname": account_name
+#     }
+
+#     # The 'files' parameter handles multipart/form-data.
+#     # We include both the regular fields and the file here.
+#     files = [
+#         ('new_leadidentificationarea', (None, data['new_leadidentificationarea'])),
+#         ('new_name', (None, data['new_name'])),
+#         ('new_accountname', (None, data['new_accountname']))
+#     ]
+
+#     try:
+#         logging.info("Attempting to send lead data and file to API...")
+#         response = requests.post(api_url, files=files)
+#         response.raise_for_status()
+#         logging.info("✅ Lead data and file successfully sent to API.")
+#         return True
+#     except requests.exceptions.RequestException as e:
+#         logging.error(f"❌ Failed to send lead data to API: {e}")
+#         if e.response is not None:
+#             logging.error(f"Response content: {e.response.text}")
+#         return False
 
 # def send_lead_data_to_api(lead_areas, account_name, lead_name):
 #     """
@@ -645,6 +691,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
         if email_flag:
             try:
                 lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+                lead_doc_bytes = lead_doc_stream.getvalue()
                 full_doc_name, full_doc_stream = create_full_docx(
                     website_content, linkedin_content, news_content, company
                 )
@@ -670,7 +717,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                 )
                 if sent:
                     logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name,  lead_doc_stream)
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_file_name=lead_doc_name, lead_doc_bytes)
                     logging.info("📨 Lead data posted to external API.")
                 else:
                     logging.warning("⚠️ Email not sent.")
@@ -988,6 +1035,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
