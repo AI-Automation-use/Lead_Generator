@@ -454,50 +454,55 @@ def send_email(access_token, recipient_emails, subject, body, attachments=None):
 def markdown_bold_to_html(text):
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
 
-# def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, lead_doc_stream):
 def send_lead_data_to_api(
     lead_areas: str,
     account_name: str,
     lead_name: str,
-    lead_doc_name: str | None = None,
-    lead_doc_stream: bytes | None = None,
+    file_name: str | None = None,
+    file_bytes: bytes | None = None,
 ) -> bool:
     """
-    Sends identified lead data and the lead analysis file to the external API.
+    Sends lead data to the external API.
+    - If file_name and file_bytes are provided, sends multipart/form-data using the exact pattern you confirmed works.
+    - Otherwise, falls back to a JSON POST.
     """
     api_url = os.getenv("LEAD_API_URL")
-
     if not api_url:
         logging.error("Error: 'LEAD_API_URL' environment variable not found.")
         return False
 
-    # The data to be sent as part of the form
-    data = {
-        "new_leadidentificationarea": lead_areas,
-        "new_name": lead_name,
-        "new_accountname": account_name,
-        ('new_supportingdocuments', (lead_doc_name, io.BytesIO(lead_doc_stream), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
-    }
-
-    # The 'files' parameter handles multipart/form-data.
-    # We include both the regular fields and the file here.
-    files = [
-        ('new_leadidentificationarea', (None, data['new_leadidentificationarea'])),
-        ('new_name', (None, data['new_name'])),
-        ('new_accountname', (None, data['new_accountname']))
-    ]
-
     try:
-        logging.info("Attempting to send lead data and file to API...")
-        response = requests.post(api_url, files=files)
-        response.raise_for_status()
-        logging.info("✅ Lead data and file successfully sent to API.")
+        if file_name and file_bytes is not None:
+            logging.info("Attempting to send lead data + file to API (multipart/form-data)...")
+
+            files = [
+                ('new_leadidentificationarea', (None, lead_areas)),
+                ('new_name', (None, lead_name)),
+                ('new_accountname', (None, account_name)),
+                # Use the same field name you used in the working snippet:
+                ('new_supportingdocuments', (file_name, io.BytesIO(file_bytes), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')),
+            ]
+            resp = requests.post(api_url, files=files, timeout=60)
+        else:
+            logging.info("Attempting to send lead data to API (JSON)...")
+            data = {
+                "new_leadidentificationarea": lead_areas,
+                "new_name": lead_name,
+                "new_accountname": account_name
+            }
+            resp = requests.post(api_url, json=data, timeout=60)
+
+        resp.raise_for_status()
+        logging.info("✅ Lead data successfully sent to API.")
         return True
+
     except requests.exceptions.RequestException as e:
         logging.error(f"❌ Failed to send lead data to API: {e}")
-        if e.response is not None:
-            logging.error(f"Response content: {e.response.text}")
+        if getattr(e, "response", None) is not None:
+            logging.error(f"Status: {e.response.status_code}")
+            logging.error(f"Response: {e.response.text}")
         return False
+
 
 # working when only data is sent attachment is pending through form-data
 # def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, lead_doc_stream):
@@ -715,12 +720,24 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                     email_body,
                     attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
                 )
+                # if sent:
+                #     logging.info("✅ Email sent with attachments.")
+                #     send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                #     logging.info("📨 Lead data posted to external API.")
+                # else:
+                #     logging.warning("⚠️ Email not sent.")
                 if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
+                    api_ok = send_lead_data_to_api(
+                    lead_areas=lead_areas,
+                    account_name=my_account_name,
+                    lead_name=my_lead_name,
+                    file_name=lead_doc_name,       # lead analysis file
+                    file_bytes=lead_doc_bytes      # bytes captured above
+                    )
+                    if api_ok:
+                        logging.info("📨 Lead data + file successfully posted to external API.")
+                    else:
+                        logging.warning("⚠️ Lead data post to external API failed.")
             except Exception as e:
                 logging.error(f"❌ Error in email or token process: {e}")
         else:
@@ -1036,6 +1053,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
