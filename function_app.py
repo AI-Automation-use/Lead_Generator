@@ -717,7 +717,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                 )
                 if sent:
                     logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_file_name=lead_doc_name, lead_doc_bytes)
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
                     logging.info("📨 Lead data posted to external API.")
                 else:
                     logging.warning("⚠️ Email not sent.")
@@ -848,6 +848,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
         if email_flag:
             try:
                 lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+                lead_doc_bytes = lead_doc_stream.getvalue()
                 full_doc_name, full_doc_stream = create_full_docx(
                     website_content, linkedin_content, news_content, company
                 )
@@ -873,7 +874,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
                 )
                 if sent:
                     logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name,  lead_doc_stream)
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
                     logging.info("📨 Lead data posted to external API.")
                 else:
                     logging.warning("⚠️ Email not sent.")
@@ -1035,6 +1036,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
