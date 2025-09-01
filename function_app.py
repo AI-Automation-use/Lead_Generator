@@ -476,8 +476,7 @@ def send_lead_data_to_api(lead_areas, account_name, lead_name, lead_doc_name, le
     files = [
         ('new_leadidentificationarea', (None, data['new_leadidentificationarea'])),
         ('new_name', (None, data['new_name'])),
-        ('new_accountname', (None, data['new_accountname'])),
-        ('lead_analysis_file', (lead_doc_name, lead_doc_stream, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
+        ('new_accountname', (None, data['new_accountname']))
     ]
 
     try:
@@ -989,6 +988,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 
 #     logging.info("Lead generation run completed.")
+
 
 
 
