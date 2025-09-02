@@ -510,7 +510,7 @@ TARGET_COMPANY1 = os.getenv("TARGET_COMPANY1")
 
 
 @app.function_name(name="ComputaCenter")
-@app.schedule(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 30 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def ComputaCenter(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -667,7 +667,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
 
 TARGET_COMPANY2 = os.getenv("TARGET_COMPANY2")
 @app.function_name(name="PennyMac")
-@app.schedule(schedule="0 */7 * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 35 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def PennyMac(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -822,4 +822,477 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
     logging.info("✅ Lead generation cycle completed.")
 
+
+TARGET_COMPANY3 = os.getenv("TARGET_COMPANY3")
+@app.function_name(name="Fountaintire")
+@app.schedule(schedule="0 40 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+def Fountaintire(myTimer: func.TimerRequest) -> None:
+    utc_timestamp = datetime.utcnow()
+
+    if myTimer.past_due:
+        logging.warning("⏰ Timer is past due!")
+
+    logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
+
+    company = TARGET_COMPANY3
+    pages = 1
+    my_account_name = "Fountain Tire"
+    my_lead_name = "Lead from Lead Generator Tool"
+
+    # 1. GNews Fetch
+    logging.info(f"🔍 Fetching GNews articles for: {company}")
+    today = datetime.utcnow()
+    frm = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    to = today.strftime("%Y-%m-%d")
+    news_results = []
+    try:
+        resp = requests.get(
+            BASE_URL,
+            params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
+            verify=True
+        )
+        resp.raise_for_status()
+        for art in resp.json().get("articles", []):
+            news_results.append({
+                "title": art.get("title", ""),
+                "description": art.get("description", ""),
+                "url": art.get("url", "")
+            })
+        logging.info(f"✅ GNews API returned {len(news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ GNews API error: {e}")
+
+    # 2. Google News Scrape
+    logging.info("🌐 Scraping Google News...")
+    try:
+        google_news_results = scrape_google_news(company, pages)
+        logging.info(f"✅ Google News scrape found {len(google_news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ Google News scraping error: {e}")
+        google_news_results = []
+
+    all_news = news_results + google_news_results
+    if not all_news:
+        logging.warning("⚠️ No news results found; skipping.")
+        return
+
+    news_content = "\n\n".join(
+        f"**Title:** {n['title']}\n**Description:** {n['description']}\n**URL:** {n['url']}"
+        for n in all_news
+    )
+
+    # 3. Website Scraping
+    logging.info("🌐 Finding and scraping company website...")
+    website = get_company_website(company, API_KEY, CX)
+    if not website:
+        logging.error(f"❌ Could not find website for {company}.")
+        return
+    try:
+        website_content, _ = scrape_website(website)
+        logging.info("✅ Website scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ Website scraping error: {e}")
+        return
+
+    # 4. LinkedIn Scraping
+    logging.info("🔗 Finding and scraping LinkedIn profile...")
+    linkedin_url = get_company_website(company + " LinkedIn", API_KEY, CX)
+    if not linkedin_url:
+        logging.error(f"❌ Could not find LinkedIn profile for {company}.")
+        return
+    try:
+        linkedin_content, _ = scrape_website(linkedin_url)
+        logging.info("✅ LinkedIn scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ LinkedIn scraping error: {e}")
+        return
+
+    # 5. AI Lead Check
+    logging.info("🤖 Performing AI-based lead analysis...")
+    try:
+        lead_analysis, potential_lead_check = check_potential_lead(
+            website_content, linkedin_content, news_content
+        )
+        logging.info("✅ Lead analysis complete.")
+    except Exception as e:
+        logging.error(f"❌ OpenAI analysis error: {e}")
+        return
+    logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
+
+    if potential_lead_check.strip().lower() == "yes":
+        logging.info("📌 Lead confirmed. Extracting lead details...")
+        try:
+            details = extract_lead_details(lead_analysis, company)
+            logging.info("✅ Lead details extracted.")
+        except Exception as e:
+            logging.error(f"❌ Failed to extract lead details: {e}")
+            return
+
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
+        lead_areas = m.group(1).strip() if m else "Not available"
+
+        try:
+            email_flag = add_lead_to_excel(company, lead_areas)
+            logging.info("✅ Excel updated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Excel update error: {e}")
+            email_flag = False
+
+        if email_flag:
+            try:
+                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+                lead_doc_bytes = lead_doc_stream.getvalue()
+                full_doc_name, full_doc_stream = create_full_docx(
+                    website_content, linkedin_content, news_content, company
+                )
+                logging.info("📄 DOCX files generated.")
+            except Exception as e:
+                logging.error(f"❌ Error generating DOCX files: {e}")
+                return
+
+            try:
+                token = get_access_token()
+                logging.info("🔐 Access token acquired.")
+                email_body = (
+                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
+                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
+                    + "<p>See attachments for full reports.</p></body></html>"
+                )
+                sent = send_email(
+                    token,
+                    ["vishnu.kg@sonata-software.com"],
+                    f"Potential Lead Identified – {company}",
+                    email_body,
+                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
+                )
+                if sent:
+                    logging.info("✅ Email sent with attachments.")
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                    logging.info("📨 Lead data posted to external API.")
+                else:
+                    logging.warning("⚠️ Email not sent.")
+            except Exception as e:
+                logging.error(f"❌ Error in email or token process: {e}")
+        else:
+            logging.info("📝 No new lead areas identified; skipping email.")
+    else:
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+
+    logging.info("✅ Lead generation cycle completed.")
+
+
+TARGET_COMPANY4 = os.getenv("TARGET_COMPANY4")
+@app.function_name(name="Wellpath")
+@app.schedule(schedule="0 45 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+def Wellpath(myTimer: func.TimerRequest) -> None:
+    utc_timestamp = datetime.utcnow()
+
+    if myTimer.past_due:
+        logging.warning("⏰ Timer is past due!")
+
+    logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
+
+    company = TARGET_COMPANY4
+    pages = 1
+    my_account_name = "Wellpath"
+    my_lead_name = "Lead from Lead Generator Tool"
+
+    # 1. GNews Fetch
+    logging.info(f"🔍 Fetching GNews articles for: {company}")
+    today = datetime.utcnow()
+    frm = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    to = today.strftime("%Y-%m-%d")
+    news_results = []
+    try:
+        resp = requests.get(
+            BASE_URL,
+            params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
+            verify=True
+        )
+        resp.raise_for_status()
+        for art in resp.json().get("articles", []):
+            news_results.append({
+                "title": art.get("title", ""),
+                "description": art.get("description", ""),
+                "url": art.get("url", "")
+            })
+        logging.info(f"✅ GNews API returned {len(news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ GNews API error: {e}")
+
+    # 2. Google News Scrape
+    logging.info("🌐 Scraping Google News...")
+    try:
+        google_news_results = scrape_google_news(company, pages)
+        logging.info(f"✅ Google News scrape found {len(google_news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ Google News scraping error: {e}")
+        google_news_results = []
+
+    all_news = news_results + google_news_results
+    if not all_news:
+        logging.warning("⚠️ No news results found; skipping.")
+        return
+
+    news_content = "\n\n".join(
+        f"**Title:** {n['title']}\n**Description:** {n['description']}\n**URL:** {n['url']}"
+        for n in all_news
+    )
+
+    # 3. Website Scraping
+    logging.info("🌐 Finding and scraping company website...")
+    website = get_company_website(company, API_KEY, CX)
+    if not website:
+        logging.error(f"❌ Could not find website for {company}.")
+        return
+    try:
+        website_content, _ = scrape_website(website)
+        logging.info("✅ Website scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ Website scraping error: {e}")
+        return
+
+    # 4. LinkedIn Scraping
+    logging.info("🔗 Finding and scraping LinkedIn profile...")
+    linkedin_url = get_company_website(company + " LinkedIn", API_KEY, CX)
+    if not linkedin_url:
+        logging.error(f"❌ Could not find LinkedIn profile for {company}.")
+        return
+    try:
+        linkedin_content, _ = scrape_website(linkedin_url)
+        logging.info("✅ LinkedIn scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ LinkedIn scraping error: {e}")
+        return
+
+    # 5. AI Lead Check
+    logging.info("🤖 Performing AI-based lead analysis...")
+    try:
+        lead_analysis, potential_lead_check = check_potential_lead(
+            website_content, linkedin_content, news_content
+        )
+        logging.info("✅ Lead analysis complete.")
+    except Exception as e:
+        logging.error(f"❌ OpenAI analysis error: {e}")
+        return
+    logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
+
+    if potential_lead_check.strip().lower() == "yes":
+        logging.info("📌 Lead confirmed. Extracting lead details...")
+        try:
+            details = extract_lead_details(lead_analysis, company)
+            logging.info("✅ Lead details extracted.")
+        except Exception as e:
+            logging.error(f"❌ Failed to extract lead details: {e}")
+            return
+
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
+        lead_areas = m.group(1).strip() if m else "Not available"
+
+        try:
+            email_flag = add_lead_to_excel(company, lead_areas)
+            logging.info("✅ Excel updated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Excel update error: {e}")
+            email_flag = False
+
+        if email_flag:
+            try:
+                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+                lead_doc_bytes = lead_doc_stream.getvalue()
+                full_doc_name, full_doc_stream = create_full_docx(
+                    website_content, linkedin_content, news_content, company
+                )
+                logging.info("📄 DOCX files generated.")
+            except Exception as e:
+                logging.error(f"❌ Error generating DOCX files: {e}")
+                return
+
+            try:
+                token = get_access_token()
+                logging.info("🔐 Access token acquired.")
+                email_body = (
+                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
+                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
+                    + "<p>See attachments for full reports.</p></body></html>"
+                )
+                sent = send_email(
+                    token,
+                    ["vishnu.kg@sonata-software.com"],
+                    f"Potential Lead Identified – {company}",
+                    email_body,
+                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
+                )
+                if sent:
+                    logging.info("✅ Email sent with attachments.")
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                    logging.info("📨 Lead data posted to external API.")
+                else:
+                    logging.warning("⚠️ Email not sent.")
+            except Exception as e:
+                logging.error(f"❌ Error in email or token process: {e}")
+        else:
+            logging.info("📝 No new lead areas identified; skipping email.")
+    else:
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+
+    logging.info("✅ Lead generation cycle completed.")
+
+
+TARGET_COMPANY5 = os.getenv("TARGET_COMPANY5")
+@app.function_name(name="TUI")
+@app.schedule(schedule="0 50 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+def TUI(myTimer: func.TimerRequest) -> None:
+    utc_timestamp = datetime.utcnow()
+
+    if myTimer.past_due:
+        logging.warning("⏰ Timer is past due!")
+
+    logging.info(f"🕒 Python timer trigger function started at: {utc_timestamp}")
+
+    company = TARGET_COMPANY5
+    pages = 1
+    my_account_name = "TUI"
+    my_lead_name = "Lead from Lead Generator Tool"
+
+    # 1. GNews Fetch
+    logging.info(f"🔍 Fetching GNews articles for: {company}")
+    today = datetime.utcnow()
+    frm = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    to = today.strftime("%Y-%m-%d")
+    news_results = []
+    try:
+        resp = requests.get(
+            BASE_URL,
+            params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
+            verify=True
+        )
+        resp.raise_for_status()
+        for art in resp.json().get("articles", []):
+            news_results.append({
+                "title": art.get("title", ""),
+                "description": art.get("description", ""),
+                "url": art.get("url", "")
+            })
+        logging.info(f"✅ GNews API returned {len(news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ GNews API error: {e}")
+
+    # 2. Google News Scrape
+    logging.info("🌐 Scraping Google News...")
+    try:
+        google_news_results = scrape_google_news(company, pages)
+        logging.info(f"✅ Google News scrape found {len(google_news_results)} articles.")
+    except Exception as e:
+        logging.error(f"❌ Google News scraping error: {e}")
+        google_news_results = []
+
+    all_news = news_results + google_news_results
+    if not all_news:
+        logging.warning("⚠️ No news results found; skipping.")
+        return
+
+    news_content = "\n\n".join(
+        f"**Title:** {n['title']}\n**Description:** {n['description']}\n**URL:** {n['url']}"
+        for n in all_news
+    )
+
+    # 3. Website Scraping
+    logging.info("🌐 Finding and scraping company website...")
+    website = get_company_website(company, API_KEY, CX)
+    if not website:
+        logging.error(f"❌ Could not find website for {company}.")
+        return
+    try:
+        website_content, _ = scrape_website(website)
+        logging.info("✅ Website scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ Website scraping error: {e}")
+        return
+
+    # 4. LinkedIn Scraping
+    logging.info("🔗 Finding and scraping LinkedIn profile...")
+    linkedin_url = get_company_website(company + " LinkedIn", API_KEY, CX)
+    if not linkedin_url:
+        logging.error(f"❌ Could not find LinkedIn profile for {company}.")
+        return
+    try:
+        linkedin_content, _ = scrape_website(linkedin_url)
+        logging.info("✅ LinkedIn scraped successfully.")
+    except Exception as e:
+        logging.error(f"❌ LinkedIn scraping error: {e}")
+        return
+
+    # 5. AI Lead Check
+    logging.info("🤖 Performing AI-based lead analysis...")
+    try:
+        lead_analysis, potential_lead_check = check_potential_lead(
+            website_content, linkedin_content, news_content
+        )
+        logging.info("✅ Lead analysis complete.")
+    except Exception as e:
+        logging.error(f"❌ OpenAI analysis error: {e}")
+        return
+    logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
+
+    if potential_lead_check.strip().lower() == "yes":
+        logging.info("📌 Lead confirmed. Extracting lead details...")
+        try:
+            details = extract_lead_details(lead_analysis, company)
+            logging.info("✅ Lead details extracted.")
+        except Exception as e:
+            logging.error(f"❌ Failed to extract lead details: {e}")
+            return
+
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
+        lead_areas = m.group(1).strip() if m else "Not available"
+
+        try:
+            email_flag = add_lead_to_excel(company, lead_areas)
+            logging.info("✅ Excel updated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Excel update error: {e}")
+            email_flag = False
+
+        if email_flag:
+            try:
+                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
+                lead_doc_bytes = lead_doc_stream.getvalue()
+                full_doc_name, full_doc_stream = create_full_docx(
+                    website_content, linkedin_content, news_content, company
+                )
+                logging.info("📄 DOCX files generated.")
+            except Exception as e:
+                logging.error(f"❌ Error generating DOCX files: {e}")
+                return
+
+            try:
+                token = get_access_token()
+                logging.info("🔐 Access token acquired.")
+                email_body = (
+                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
+                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
+                    + "<p>See attachments for full reports.</p></body></html>"
+                )
+                sent = send_email(
+                    token,
+                    ["vishnu.kg@sonata-software.com"],
+                    f"Potential Lead Identified – {company}",
+                    email_body,
+                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
+                )
+                if sent:
+                    logging.info("✅ Email sent with attachments.")
+                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                    logging.info("📨 Lead data posted to external API.")
+                else:
+                    logging.warning("⚠️ Email not sent.")
+            except Exception as e:
+                logging.error(f"❌ Error in email or token process: {e}")
+        else:
+            logging.info("📝 No new lead areas identified; skipping email.")
+    else:
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+
+    logging.info("✅ Lead generation cycle completed.")
 
