@@ -14,7 +14,6 @@ from docx import Document
 from newspaper import Article
 from urllib.parse import quote
 import msal
-import requests
 import base64
 import re
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
@@ -503,6 +502,67 @@ def send_lead_data_to_api(
             logging.error(f"Response: {e.response.text}")
         return False
 
+def check_potential_lead_by_area(single_lead_area, website_content, linkedin_content, news_content):
+    """
+    Analyzes content for a single, specific lead identification area.
+    Returns the detailed analysis and a 'Yes' or 'No' based on that area.
+    """
+    combined_content = f"""
+    You are a market-intelligence assistant. Your task is to analyze the following source materials and determine if there is any evidence of **{single_lead_area}**.
+
+    Provide a text report with three sections:
+
+    1.  **{single_lead_area}** State "Yes" or "No" if evidence of **{single_lead_area}** is found and in detail explain why for "yes" along with source link or supporting content if present. Do not give random websites/Content if not found.
+    2.  **Contacts** List each contact found, with type (email or phone or name along with title) and the source (Website, LinkedIn, or News).
+    2.  **Evidence**: Under sub‑headings for Website, LinkedIn, and News, give the exact excerpt(s) that support the interest findings. Do not give random websites/Content if not found.
+
+    **Sources**
+    Website Content:
+    {website_content}
+
+    LinkedIn Profile Content:
+    {linkedin_content}
+
+    Recent News Articles:
+    {news_content}
+    """
+    
+    response = client.chat.completions.create(
+        model=AZURE_DEPLOYMENT,
+        messages=[{"role": "user", "content": combined_content}],
+    )
+    analysis = response.choices[0].message.content
+    
+    # Check if the analysis confirms a lead for this specific area
+    potential_lead_check = "Yes" if "Yes" in analysis or "yes" in analysis else "No"
+    
+    return analysis, potential_lead_check
+
+def extract_single_lead_details(lead_analysis, company):
+    prompt = f"""
+    Given the following lead analysis for the company "{company}", extract and return the following in plain text format:
+    
+    1. Customer/Client Name
+    2. Lead Identification Area (e.g., SFR150, Zones, DYN365, AI, AWS, Cost Takeout, Cloud Migration, Data Migration, Platform Migration, SaaS, GCC, Partner with IT) Mention any one. do not give more than one and no details.
+    3. Contact Information (such as phone numbers, email addresses, LinkedIn profiles, job titles)
+
+    Format the output like this:
+    
+    **Customer/Client Name**: <value>
+    **Lead Identification Area**: <value>
+    **Contact Information**: <value>
+    
+    If a field is not found, just leave it like.
+
+    Lead Analysis:
+    {lead_analysis}
+    """
+    response = client.chat.completions.create(
+        model=AZURE_DEPLOYMENT,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    extracted = response.choices[0].message.content.strip()
+    return extracted
 
 # The Function App and Timer Trigger decorator
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -604,64 +664,111 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
 
-    if potential_lead_check.strip().lower() == "yes":
-        logging.info("📌 Lead confirmed. Extracting lead details...")
+    if potential_lead_check.strip().lower() == "yes": 
+        logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
+        
+        # --- REVISED LOGIC FOR AREA EXTRACTION ---
         try:
-            details = extract_lead_details(lead_analysis, company)
-            logging.info("✅ Lead details extracted.")
+            combined_details = extract_lead_details(lead_analysis, company)
+            # This line will show you the exact string the AI returned.
+            # Use this for debugging to see why the regex is not finding a match.
+            logging.info(f"🔍 Raw AI output for lead areas: \n{combined_details}")
         except Exception as e:
-            logging.error(f"❌ Failed to extract lead details: {e}")
+            logging.error(f"❌ Failed to extract lead details from initial analysis: {e}")
+            return
+            
+        all_lead_areas_list = []
+        
+        # Search for the "Lead Identification Area" line using a flexible regex
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", combined_details)
+        
+        if m:
+            all_lead_areas_str = m.group(1).strip()
+            # Check if the AI returned a placeholder like "Not available"
+            if all_lead_areas_str.lower() != "not available":
+                all_lead_areas_list = [area.strip() for area in all_lead_areas_str.split(',') if area.strip()]
+
+        if not all_lead_areas_list:
+            logging.info("📝 The broad analysis did not identify any specific lead areas.")
             return
 
-        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
-        lead_areas = m.group(1).strip() if m else "Not available"
+        logging.info(f"✅ Initially identified lead areas: {all_lead_areas_list}")
 
-        try:
-            email_flag = add_lead_to_excel(company, lead_areas)
-            logging.info("✅ Excel updated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Excel update error: {e}")
-            email_flag = False
+        # --- LOGIC TO FILTER OUT DUPLICATES BEFORE PROCESSING ---
+        df = get_identified_leads_df()
+        existing_company_row = df[df["Company Name"] == company]
+        truly_new_areas_to_process = []
 
-        if email_flag:
-            try:
-                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
-                lead_doc_bytes = lead_doc_stream.getvalue()
-                full_doc_name, full_doc_stream = create_full_docx(
-                    website_content, linkedin_content, news_content, company
-                )
-                logging.info("📄 DOCX files generated.")
-            except Exception as e:
-                logging.error(f"❌ Error generating DOCX files: {e}")
+        if not existing_company_row.empty:
+            existing_areas_str = existing_company_row["Lead Identification Areas"].iloc[0]
+            existing_areas_set = set(normalize_areas_string(existing_areas_str).split(', ') if existing_areas_str else set())
+            
+            truly_new_areas_to_process = [area for area in all_lead_areas_list if area not in existing_areas_set]
+            
+            if not truly_new_areas_to_process:
+                logging.info(f"📝 All identified areas for '{company}' are already in the Excel file. Skipping targeted analysis.")
                 return
-
-            try:
-                token = get_access_token()
-                logging.info("🔐 Access token acquired.")
-                email_body = (
-                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
-                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
-                    + "<p>See attachments for full reports.</p></body></html>"
-                )
-                sent = send_email(
-                    token,
-                    ["vishnu.kg@sonata-software.com"],
-                    f"Potential Lead Identified – {company}",
-                    email_body,
-                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
-                )
-                if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
-            except Exception as e:
-                logging.error(f"❌ Error in email or token process: {e}")
         else:
-            logging.info("📝 No new lead areas identified; skipping email.")
-    else:
-        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+            truly_new_areas_to_process = all_lead_areas_list
+        
+        logging.info(f"✅ Found {len(truly_new_areas_to_process)} truly new areas to process: {truly_new_areas_to_process}")
+
+        # --- LOOP OVER ONLY THE NEW AREAS ---
+
+        for lead_area in truly_new_areas_to_process:
+            logging.info(f"🔄 Re-analyzing content for specific new area: '{lead_area}'")
+            try:
+                area_analysis, area_potential_check = check_potential_lead_by_area(
+                    lead_area, website_content, linkedin_content, news_content
+                )
+                
+                if area_potential_check.strip().lower() == "yes":
+                    area_details = extract_single_lead_details(area_analysis, company)
+                    
+                    email_flag = add_lead_to_excel(company, lead_area)
+                    
+                    if email_flag:
+                        logging.info("✅ Excel updated successfully.")
+                        
+                        lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
+                        lead_doc_bytes = lead_doc_stream.getvalue() 
+                        full_doc_name, full_doc_stream = create_full_docx(
+                            website_content, linkedin_content, news_content, company
+                        )
+                        
+                        logging.info("📄 DOCX files generated.")
+                        
+                        token = get_access_token() 
+                        logging.info("🔐 Access token acquired.") 
+                        
+                        # Fix the markdown bolding here
+                        # clean_lead_area = remove_markdown_bold(lead_area)
+
+                        email_body = ( 
+                            f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
+                            + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in area_details.splitlines()) 
+                            + "<p>See attachments for full reports.</p></body></html>" 
+                        ) 
+                        
+                        sent = send_email(
+                            token,
+                            ["vishnu.kg@sonata-software.com"],
+                            f"New Lead: {company} - {lead_area}", 
+                            email_body, 
+                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                        ) 
+                        
+                        if sent: 
+                            logging.info(f"✅ Email sent for area: '{lead_area}'") 
+                            send_lead_data_to_api(lead_area, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                            logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
+                        else: 
+                            logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+            except Exception as e:
+                logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
+                
+    else: 
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
 
@@ -761,64 +868,111 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
 
-    if potential_lead_check.strip().lower() == "yes":
-        logging.info("📌 Lead confirmed. Extracting lead details...")
+    if potential_lead_check.strip().lower() == "yes": 
+        logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
+        
+        # --- REVISED LOGIC FOR AREA EXTRACTION ---
         try:
-            details = extract_lead_details(lead_analysis, company)
-            logging.info("✅ Lead details extracted.")
+            combined_details = extract_lead_details(lead_analysis, company)
+            # This line will show you the exact string the AI returned.
+            # Use this for debugging to see why the regex is not finding a match.
+            logging.info(f"🔍 Raw AI output for lead areas: \n{combined_details}")
         except Exception as e:
-            logging.error(f"❌ Failed to extract lead details: {e}")
+            logging.error(f"❌ Failed to extract lead details from initial analysis: {e}")
+            return
+            
+        all_lead_areas_list = []
+        
+        # Search for the "Lead Identification Area" line using a flexible regex
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", combined_details)
+        
+        if m:
+            all_lead_areas_str = m.group(1).strip()
+            # Check if the AI returned a placeholder like "Not available"
+            if all_lead_areas_str.lower() != "not available":
+                all_lead_areas_list = [area.strip() for area in all_lead_areas_str.split(',') if area.strip()]
+
+        if not all_lead_areas_list:
+            logging.info("📝 The broad analysis did not identify any specific lead areas.")
             return
 
-        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
-        lead_areas = m.group(1).strip() if m else "Not available"
+        logging.info(f"✅ Initially identified lead areas: {all_lead_areas_list}")
 
-        try:
-            email_flag = add_lead_to_excel(company, lead_areas)
-            logging.info("✅ Excel updated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Excel update error: {e}")
-            email_flag = False
+        # --- LOGIC TO FILTER OUT DUPLICATES BEFORE PROCESSING ---
+        df = get_identified_leads_df()
+        existing_company_row = df[df["Company Name"] == company]
+        truly_new_areas_to_process = []
 
-        if email_flag:
-            try:
-                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
-                lead_doc_bytes = lead_doc_stream.getvalue()
-                full_doc_name, full_doc_stream = create_full_docx(
-                    website_content, linkedin_content, news_content, company
-                )
-                logging.info("📄 DOCX files generated.")
-            except Exception as e:
-                logging.error(f"❌ Error generating DOCX files: {e}")
+        if not existing_company_row.empty:
+            existing_areas_str = existing_company_row["Lead Identification Areas"].iloc[0]
+            existing_areas_set = set(normalize_areas_string(existing_areas_str).split(', ') if existing_areas_str else set())
+            
+            truly_new_areas_to_process = [area for area in all_lead_areas_list if area not in existing_areas_set]
+            
+            if not truly_new_areas_to_process:
+                logging.info(f"📝 All identified areas for '{company}' are already in the Excel file. Skipping targeted analysis.")
                 return
-
-            try:
-                token = get_access_token()
-                logging.info("🔐 Access token acquired.")
-                email_body = (
-                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
-                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
-                    + "<p>See attachments for full reports.</p></body></html>"
-                )
-                sent = send_email(
-                    token,
-                    ["vishnu.kg@sonata-software.com"],
-                    f"Potential Lead Identified – {company}",
-                    email_body,
-                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
-                )
-                if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
-            except Exception as e:
-                logging.error(f"❌ Error in email or token process: {e}")
         else:
-            logging.info("📝 No new lead areas identified; skipping email.")
-    else:
-        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+            truly_new_areas_to_process = all_lead_areas_list
+        
+        logging.info(f"✅ Found {len(truly_new_areas_to_process)} truly new areas to process: {truly_new_areas_to_process}")
+
+        # --- LOOP OVER ONLY THE NEW AREAS ---
+
+        for lead_area in truly_new_areas_to_process:
+            logging.info(f"🔄 Re-analyzing content for specific new area: '{lead_area}'")
+            try:
+                area_analysis, area_potential_check = check_potential_lead_by_area(
+                    lead_area, website_content, linkedin_content, news_content
+                )
+                
+                if area_potential_check.strip().lower() == "yes":
+                    area_details = extract_single_lead_details(area_analysis, company)
+                    
+                    email_flag = add_lead_to_excel(company, lead_area)
+                    
+                    if email_flag:
+                        logging.info("✅ Excel updated successfully.")
+                        
+                        lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
+                        lead_doc_bytes = lead_doc_stream.getvalue() 
+                        full_doc_name, full_doc_stream = create_full_docx(
+                            website_content, linkedin_content, news_content, company
+                        )
+                        
+                        logging.info("📄 DOCX files generated.")
+                        
+                        token = get_access_token() 
+                        logging.info("🔐 Access token acquired.") 
+                        
+                        # Fix the markdown bolding here
+                        # clean_lead_area = remove_markdown_bold(lead_area)
+
+                        email_body = ( 
+                            f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
+                            + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in area_details.splitlines()) 
+                            + "<p>See attachments for full reports.</p></body></html>" 
+                        ) 
+                        
+                        sent = send_email(
+                            token,
+                            ["vishnu.kg@sonata-software.com"],
+                            f"New Lead: {company} - {lead_area}", 
+                            email_body, 
+                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                        ) 
+                        
+                        if sent: 
+                            logging.info(f"✅ Email sent for area: '{lead_area}'") 
+                            send_lead_data_to_api(lead_area, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                            logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
+                        else: 
+                            logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+            except Exception as e:
+                logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
+                
+    else: 
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
 
@@ -919,66 +1073,114 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
 
-    if potential_lead_check.strip().lower() == "yes":
-        logging.info("📌 Lead confirmed. Extracting lead details...")
+    if potential_lead_check.strip().lower() == "yes": 
+        logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
+        
+        # --- REVISED LOGIC FOR AREA EXTRACTION ---
         try:
-            details = extract_lead_details(lead_analysis, company)
-            logging.info("✅ Lead details extracted.")
+            combined_details = extract_lead_details(lead_analysis, company)
+            # This line will show you the exact string the AI returned.
+            # Use this for debugging to see why the regex is not finding a match.
+            logging.info(f"🔍 Raw AI output for lead areas: \n{combined_details}")
         except Exception as e:
-            logging.error(f"❌ Failed to extract lead details: {e}")
+            logging.error(f"❌ Failed to extract lead details from initial analysis: {e}")
+            return
+            
+        all_lead_areas_list = []
+        
+        # Search for the "Lead Identification Area" line using a flexible regex
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", combined_details)
+        
+        if m:
+            all_lead_areas_str = m.group(1).strip()
+            # Check if the AI returned a placeholder like "Not available"
+            if all_lead_areas_str.lower() != "not available":
+                all_lead_areas_list = [area.strip() for area in all_lead_areas_str.split(',') if area.strip()]
+
+        if not all_lead_areas_list:
+            logging.info("📝 The broad analysis did not identify any specific lead areas.")
             return
 
-        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
-        lead_areas = m.group(1).strip() if m else "Not available"
+        logging.info(f"✅ Initially identified lead areas: {all_lead_areas_list}")
 
-        try:
-            email_flag = add_lead_to_excel(company, lead_areas)
-            logging.info("✅ Excel updated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Excel update error: {e}")
-            email_flag = False
+        # --- LOGIC TO FILTER OUT DUPLICATES BEFORE PROCESSING ---
+        df = get_identified_leads_df()
+        existing_company_row = df[df["Company Name"] == company]
+        truly_new_areas_to_process = []
 
-        if email_flag:
-            try:
-                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
-                lead_doc_bytes = lead_doc_stream.getvalue()
-                full_doc_name, full_doc_stream = create_full_docx(
-                    website_content, linkedin_content, news_content, company
-                )
-                logging.info("📄 DOCX files generated.")
-            except Exception as e:
-                logging.error(f"❌ Error generating DOCX files: {e}")
+        if not existing_company_row.empty:
+            existing_areas_str = existing_company_row["Lead Identification Areas"].iloc[0]
+            existing_areas_set = set(normalize_areas_string(existing_areas_str).split(', ') if existing_areas_str else set())
+            
+            truly_new_areas_to_process = [area for area in all_lead_areas_list if area not in existing_areas_set]
+            
+            if not truly_new_areas_to_process:
+                logging.info(f"📝 All identified areas for '{company}' are already in the Excel file. Skipping targeted analysis.")
                 return
-
-            try:
-                token = get_access_token()
-                logging.info("🔐 Access token acquired.")
-                email_body = (
-                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
-                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
-                    + "<p>See attachments for full reports.</p></body></html>"
-                )
-                sent = send_email(
-                    token,
-                    ["vishnu.kg@sonata-software.com"],
-                    f"Potential Lead Identified – {company}",
-                    email_body,
-                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
-                )
-                if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
-            except Exception as e:
-                logging.error(f"❌ Error in email or token process: {e}")
         else:
-            logging.info("📝 No new lead areas identified; skipping email.")
-    else:
-        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+            truly_new_areas_to_process = all_lead_areas_list
+        
+        logging.info(f"✅ Found {len(truly_new_areas_to_process)} truly new areas to process: {truly_new_areas_to_process}")
+
+        # --- LOOP OVER ONLY THE NEW AREAS ---
+
+        for lead_area in truly_new_areas_to_process:
+            logging.info(f"🔄 Re-analyzing content for specific new area: '{lead_area}'")
+            try:
+                area_analysis, area_potential_check = check_potential_lead_by_area(
+                    lead_area, website_content, linkedin_content, news_content
+                )
+                
+                if area_potential_check.strip().lower() == "yes":
+                    area_details = extract_single_lead_details(area_analysis, company)
+                    
+                    email_flag = add_lead_to_excel(company, lead_area)
+                    
+                    if email_flag:
+                        logging.info("✅ Excel updated successfully.")
+                        
+                        lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
+                        lead_doc_bytes = lead_doc_stream.getvalue() 
+                        full_doc_name, full_doc_stream = create_full_docx(
+                            website_content, linkedin_content, news_content, company
+                        )
+                        
+                        logging.info("📄 DOCX files generated.")
+                        
+                        token = get_access_token() 
+                        logging.info("🔐 Access token acquired.") 
+                        
+                        # Fix the markdown bolding here
+                        # clean_lead_area = remove_markdown_bold(lead_area)
+
+                        email_body = ( 
+                            f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
+                            + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in area_details.splitlines()) 
+                            + "<p>See attachments for full reports.</p></body></html>" 
+                        ) 
+                        
+                        sent = send_email(
+                            token,
+                            ["vishnu.kg@sonata-software.com"],
+                            f"New Lead: {company} - {lead_area}", 
+                            email_body, 
+                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                        ) 
+                        
+                        if sent: 
+                            logging.info(f"✅ Email sent for area: '{lead_area}'") 
+                            send_lead_data_to_api(lead_area, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                            logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
+                        else: 
+                            logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+            except Exception as e:
+                logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
+                
+    else: 
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
+
 
 
 TARGET_COMPANY4 = os.getenv("TARGET_COMPANY4")
@@ -1077,64 +1279,111 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
 
-    if potential_lead_check.strip().lower() == "yes":
-        logging.info("📌 Lead confirmed. Extracting lead details...")
+    if potential_lead_check.strip().lower() == "yes": 
+        logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
+        
+        # --- REVISED LOGIC FOR AREA EXTRACTION ---
         try:
-            details = extract_lead_details(lead_analysis, company)
-            logging.info("✅ Lead details extracted.")
+            combined_details = extract_lead_details(lead_analysis, company)
+            # This line will show you the exact string the AI returned.
+            # Use this for debugging to see why the regex is not finding a match.
+            logging.info(f"🔍 Raw AI output for lead areas: \n{combined_details}")
         except Exception as e:
-            logging.error(f"❌ Failed to extract lead details: {e}")
+            logging.error(f"❌ Failed to extract lead details from initial analysis: {e}")
+            return
+            
+        all_lead_areas_list = []
+        
+        # Search for the "Lead Identification Area" line using a flexible regex
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", combined_details)
+        
+        if m:
+            all_lead_areas_str = m.group(1).strip()
+            # Check if the AI returned a placeholder like "Not available"
+            if all_lead_areas_str.lower() != "not available":
+                all_lead_areas_list = [area.strip() for area in all_lead_areas_str.split(',') if area.strip()]
+
+        if not all_lead_areas_list:
+            logging.info("📝 The broad analysis did not identify any specific lead areas.")
             return
 
-        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
-        lead_areas = m.group(1).strip() if m else "Not available"
+        logging.info(f"✅ Initially identified lead areas: {all_lead_areas_list}")
 
-        try:
-            email_flag = add_lead_to_excel(company, lead_areas)
-            logging.info("✅ Excel updated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Excel update error: {e}")
-            email_flag = False
+        # --- LOGIC TO FILTER OUT DUPLICATES BEFORE PROCESSING ---
+        df = get_identified_leads_df()
+        existing_company_row = df[df["Company Name"] == company]
+        truly_new_areas_to_process = []
 
-        if email_flag:
-            try:
-                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
-                lead_doc_bytes = lead_doc_stream.getvalue()
-                full_doc_name, full_doc_stream = create_full_docx(
-                    website_content, linkedin_content, news_content, company
-                )
-                logging.info("📄 DOCX files generated.")
-            except Exception as e:
-                logging.error(f"❌ Error generating DOCX files: {e}")
+        if not existing_company_row.empty:
+            existing_areas_str = existing_company_row["Lead Identification Areas"].iloc[0]
+            existing_areas_set = set(normalize_areas_string(existing_areas_str).split(', ') if existing_areas_str else set())
+            
+            truly_new_areas_to_process = [area for area in all_lead_areas_list if area not in existing_areas_set]
+            
+            if not truly_new_areas_to_process:
+                logging.info(f"📝 All identified areas for '{company}' are already in the Excel file. Skipping targeted analysis.")
                 return
-
-            try:
-                token = get_access_token()
-                logging.info("🔐 Access token acquired.")
-                email_body = (
-                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
-                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
-                    + "<p>See attachments for full reports.</p></body></html>"
-                )
-                sent = send_email(
-                    token,
-                    ["vishnu.kg@sonata-software.com"],
-                    f"Potential Lead Identified – {company}",
-                    email_body,
-                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
-                )
-                if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
-            except Exception as e:
-                logging.error(f"❌ Error in email or token process: {e}")
         else:
-            logging.info("📝 No new lead areas identified; skipping email.")
-    else:
-        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+            truly_new_areas_to_process = all_lead_areas_list
+        
+        logging.info(f"✅ Found {len(truly_new_areas_to_process)} truly new areas to process: {truly_new_areas_to_process}")
+
+        # --- LOOP OVER ONLY THE NEW AREAS ---
+
+        for lead_area in truly_new_areas_to_process:
+            logging.info(f"🔄 Re-analyzing content for specific new area: '{lead_area}'")
+            try:
+                area_analysis, area_potential_check = check_potential_lead_by_area(
+                    lead_area, website_content, linkedin_content, news_content
+                )
+                
+                if area_potential_check.strip().lower() == "yes":
+                    area_details = extract_single_lead_details(area_analysis, company)
+                    
+                    email_flag = add_lead_to_excel(company, lead_area)
+                    
+                    if email_flag:
+                        logging.info("✅ Excel updated successfully.")
+                        
+                        lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
+                        lead_doc_bytes = lead_doc_stream.getvalue() 
+                        full_doc_name, full_doc_stream = create_full_docx(
+                            website_content, linkedin_content, news_content, company
+                        )
+                        
+                        logging.info("📄 DOCX files generated.")
+                        
+                        token = get_access_token() 
+                        logging.info("🔐 Access token acquired.") 
+                        
+                        # Fix the markdown bolding here
+                        # clean_lead_area = remove_markdown_bold(lead_area)
+
+                        email_body = ( 
+                            f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
+                            + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in area_details.splitlines()) 
+                            + "<p>See attachments for full reports.</p></body></html>" 
+                        ) 
+                        
+                        sent = send_email(
+                            token,
+                            ["vishnu.kg@sonata-software.com"],
+                            f"New Lead: {company} - {lead_area}", 
+                            email_body, 
+                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                        ) 
+                        
+                        if sent: 
+                            logging.info(f"✅ Email sent for area: '{lead_area}'") 
+                            send_lead_data_to_api(lead_area, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                            logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
+                        else: 
+                            logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+            except Exception as e:
+                logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
+                
+    else: 
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
 
@@ -1235,64 +1484,110 @@ def TUI(myTimer: func.TimerRequest) -> None:
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
 
-    if potential_lead_check.strip().lower() == "yes":
-        logging.info("📌 Lead confirmed. Extracting lead details...")
+    if potential_lead_check.strip().lower() == "yes": 
+        logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
+        
+        # --- REVISED LOGIC FOR AREA EXTRACTION ---
         try:
-            details = extract_lead_details(lead_analysis, company)
-            logging.info("✅ Lead details extracted.")
+            combined_details = extract_lead_details(lead_analysis, company)
+            # This line will show you the exact string the AI returned.
+            # Use this for debugging to see why the regex is not finding a match.
+            logging.info(f"🔍 Raw AI output for lead areas: \n{combined_details}")
         except Exception as e:
-            logging.error(f"❌ Failed to extract lead details: {e}")
+            logging.error(f"❌ Failed to extract lead details from initial analysis: {e}")
+            return
+            
+        all_lead_areas_list = []
+        
+        # Search for the "Lead Identification Area" line using a flexible regex
+        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", combined_details)
+        
+        if m:
+            all_lead_areas_str = m.group(1).strip()
+            # Check if the AI returned a placeholder like "Not available"
+            if all_lead_areas_str.lower() != "not available":
+                all_lead_areas_list = [area.strip() for area in all_lead_areas_str.split(',') if area.strip()]
+
+        if not all_lead_areas_list:
+            logging.info("📝 The broad analysis did not identify any specific lead areas.")
             return
 
-        m = re.search(r"\*\*Lead Identification Area\*\*: (.+)", details)
-        lead_areas = m.group(1).strip() if m else "Not available"
+        logging.info(f"✅ Initially identified lead areas: {all_lead_areas_list}")
 
-        try:
-            email_flag = add_lead_to_excel(company, lead_areas)
-            logging.info("✅ Excel updated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Excel update error: {e}")
-            email_flag = False
+        # --- LOGIC TO FILTER OUT DUPLICATES BEFORE PROCESSING ---
+        df = get_identified_leads_df()
+        existing_company_row = df[df["Company Name"] == company]
+        truly_new_areas_to_process = []
 
-        if email_flag:
-            try:
-                lead_doc_name, lead_doc_stream = create_lead_docx(lead_analysis, company)
-                lead_doc_bytes = lead_doc_stream.getvalue()
-                full_doc_name, full_doc_stream = create_full_docx(
-                    website_content, linkedin_content, news_content, company
-                )
-                logging.info("📄 DOCX files generated.")
-            except Exception as e:
-                logging.error(f"❌ Error generating DOCX files: {e}")
+        if not existing_company_row.empty:
+            existing_areas_str = existing_company_row["Lead Identification Areas"].iloc[0]
+            existing_areas_set = set(normalize_areas_string(existing_areas_str).split(', ') if existing_areas_str else set())
+            
+            truly_new_areas_to_process = [area for area in all_lead_areas_list if area not in existing_areas_set]
+            
+            if not truly_new_areas_to_process:
+                logging.info(f"📝 All identified areas for '{company}' are already in the Excel file. Skipping targeted analysis.")
                 return
-
-            try:
-                token = get_access_token()
-                logging.info("🔐 Access token acquired.")
-                email_body = (
-                    f"<html><body><p>A potential lead has been identified for <strong>{company}</strong>.</p>"
-                    + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in details.splitlines())
-                    + "<p>See attachments for full reports.</p></body></html>"
-                )
-                sent = send_email(
-                    token,
-                    ["vishnu.kg@sonata-software.com"],
-                    f"Potential Lead Identified – {company}",
-                    email_body,
-                    attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)]
-                )
-                if sent:
-                    logging.info("✅ Email sent with attachments.")
-                    send_lead_data_to_api(lead_areas, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
-                    logging.info("📨 Lead data posted to external API.")
-                else:
-                    logging.warning("⚠️ Email not sent.")
-            except Exception as e:
-                logging.error(f"❌ Error in email or token process: {e}")
         else:
-            logging.info("📝 No new lead areas identified; skipping email.")
-    else:
-        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.")
+            truly_new_areas_to_process = all_lead_areas_list
+        
+        logging.info(f"✅ Found {len(truly_new_areas_to_process)} truly new areas to process: {truly_new_areas_to_process}")
+
+        # --- LOOP OVER ONLY THE NEW AREAS ---
+
+        for lead_area in truly_new_areas_to_process:
+            logging.info(f"🔄 Re-analyzing content for specific new area: '{lead_area}'")
+            try:
+                area_analysis, area_potential_check = check_potential_lead_by_area(
+                    lead_area, website_content, linkedin_content, news_content
+                )
+                
+                if area_potential_check.strip().lower() == "yes":
+                    area_details = extract_single_lead_details(area_analysis, company)
+                    
+                    email_flag = add_lead_to_excel(company, lead_area)
+                    
+                    if email_flag:
+                        logging.info("✅ Excel updated successfully.")
+                        
+                        lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
+                        lead_doc_bytes = lead_doc_stream.getvalue() 
+                        full_doc_name, full_doc_stream = create_full_docx(
+                            website_content, linkedin_content, news_content, company
+                        )
+                        
+                        logging.info("📄 DOCX files generated.")
+                        
+                        token = get_access_token() 
+                        logging.info("🔐 Access token acquired.") 
+                        
+                        # Fix the markdown bolding here
+                        # clean_lead_area = remove_markdown_bold(lead_area)
+
+                        email_body = ( 
+                            f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
+                            + "".join(f"<p>{markdown_bold_to_html(line)}</p>" for line in area_details.splitlines()) 
+                            + "<p>See attachments for full reports.</p></body></html>" 
+                        ) 
+                        
+                        sent = send_email(
+                            token,
+                            ["vishnu.kg@sonata-software.com"],
+                            f"New Lead: {company} - {lead_area}", 
+                            email_body, 
+                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                        ) 
+                        
+                        if sent: 
+                            logging.info(f"✅ Email sent for area: '{lead_area}'") 
+                            send_lead_data_to_api(lead_area, my_account_name, my_lead_name, lead_doc_name, lead_doc_bytes)
+                            logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
+                        else: 
+                            logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+            except Exception as e:
+                logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
+                
+    else: 
+        logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
-
