@@ -290,45 +290,51 @@ def scrape_website(website):
 
 def check_potential_lead(website_content, linkedin_content, news_content):
     combined_content = f"""
-    You are a market‑intelligence assistant.  
+    You are a market-intelligence assistant.
 
-    Analyze the following source materials (Website, LinkedIn, News) and produce a **text report** with these three sections:
-
-    1. **Interest**  
-       For each area below, state “Yes” or “No” and in one sentence explain why for "yes" along with source link or supoorting content if present. Do not give random websites/Content if not found
-
-       New Business Development Areas:  
-         - SFR150  
-         - Zones  
-         - DYN365  
-         - AI  
-         - AWS  
-
-       Large Deal Areas:  
-         - Cost Takeout  
-         - Cloud Migration  
-         - Data Migration  
-         - Platform Migration  
-         - SaaS  
-         - GCC  
+    Analyze the following source materials (Website, LinkedIn, News) and produce a text report with these three sections.
+    
+    Decision rules (strict):
+    - For each area, answer “Yes” ONLY if there is CLEAR, COMPANY-SPECIFIC evidence of current interest or activity in that area within the last 3 days found in the Sources below. Examples: official announcements, press releases, case studies, product/initiative pages tied to THIS company, exec statements, RFPs/tenders, partnerships, hiring/posts explicitly for that area, migration/adoption milestones.
+    - Generic capability pages, vague marketing language, industry articles not tied to THIS company, or historical items older than 3 days → “No”.
+    - Use ONLY the provided Sources block. Do NOT invent links or content.
+    - For every “Yes”, include at least one exact excerpt in the Evidence section PLUS the source URL and (if available) the date. If you cannot provide an excerpt + URL from the Sources block, answer “No”.
+    
+    1. **Interest**
+       For each area below, state “Yes” or “No”. If “Yes”, add a one-sentence why with an inline source tag like (Website), (LinkedIn), or (News).
+    
+       New Business Development Areas:
+         - SFR150
+         - Zones
+         - DYN365
+         - AI
+         - AWS
+    
+       Large Deal Areas:
+         - Cost Takeout
+         - Cloud Migration
+         - Data Migration
+         - Platform Migration
+         - SaaS
+         - GCC
          - Partner with IT
-
-    2. **Contacts**  
-       List each contact found, with type (email or phone or name along with title) and the source (Website, LinkedIn, or News).
-
-    3. **Evidence**  
-       Under sub‑headings for Website, LinkedIn, and News, give the exact excerpt(s) that support the interest findings or the contact info you listed. Do not give random websites/Content if not found
-
-       **Sources**  
-        Website Content:  
-        {website_content}
-
-        LinkedIn Profile Content:  
-        {linkedin_content}
-
-        Recent News Articles:  
-        {news_content}
-
+    
+    2. **Contacts**
+       List each contact found, with type (email/phone/name+title) and the source (Website, LinkedIn, or News). Use only items present in Sources.
+    
+    3. **Evidence**
+       Under sub-headings for Website, LinkedIn, and News, give the exact excerpt(s) that support each “Yes” or any contacts found. For each excerpt include the source URL and (if present) the date. If no supporting excerpts exist for a given area, do not fabricate; that area must be “No”.
+    
+    **Sources**
+    Website Content:
+    {website_content}
+    
+    LinkedIn Profile Content:
+    {linkedin_content}
+    
+    Recent News Articles:
+    {news_content}
+    
     """
     response = client.chat.completions.create(
         model=AZURE_DEPLOYMENT,
@@ -337,6 +343,7 @@ def check_potential_lead(website_content, linkedin_content, news_content):
     lead_analysis = response.choices[0].message.content
     potential_lead_check = classify_lead(lead_analysis)
     return lead_analysis, potential_lead_check
+
 
 def classify_lead(lead_analysis):
     prompt = f"""
@@ -360,17 +367,15 @@ def extract_lead_details(lead_analysis, company):
     prompt = f"""
     Given the following lead analysis for the company "{company}", extract and return the following in plain text format:
     
-    1. Customer/Client Name
-    2. Lead Identification Area(s) (e.g., Cloud Migration, Platform Modernization)
-    3. Contact Information (such as phone numbers, email addresses, LinkedIn profiles, job titles)
+    1. Customer Name
+    2. Lead Identification Area(s) (e.g., SFR150, Zones, DYN365, AI, AWS, Cost Takeout, Cloud Migration, Data Migration, Platform Migration, SaaS, GCC, Partner with IT)
 
     Format the output like this:
     
-    **Customer/Client Name**: <value>
+    **Customer Name**: <value>
     **Lead Identification Area**: <value>
-    **Contact Information**: <value>
     
-    If a field is not found, just write "Not available".
+    If a field is not found, just leave it like.
 
     Lead Analysis:
     {lead_analysis}
@@ -381,7 +386,6 @@ def extract_lead_details(lead_analysis, company):
     )
     extracted = response.choices[0].message.content.strip()
     return extracted
-
 
 def create_lead_docx(lead_analysis: str, company: str):
     doc = Document()
@@ -502,55 +506,17 @@ def send_lead_data_to_api(
             logging.error(f"Response: {e.response.text}")
         return False
 
-def check_potential_lead_by_area(single_lead_area, website_content, linkedin_content, news_content):
-    """
-    Analyzes content for a single, specific lead identification area.
-    Returns the detailed analysis and a 'Yes' or 'No' based on that area.
-    """
-    combined_content = f"""
-    You are a market-intelligence assistant. Your task is to analyze the following source materials and determine if there is any evidence of **{single_lead_area}**.
-
-    Provide a text report with three sections:
-
-    1.  **{single_lead_area}** State "Yes" or "No" if evidence of **{single_lead_area}** is found and in detail explain why for "yes" along with source link or supporting content if present. Do not give random websites/Content if not found.
-    2.  **Contacts** List each contact found, with type (email or phone or name along with title) and the source (Website, LinkedIn, or News).
-    2.  **Evidence**: Under sub‑headings for Website, LinkedIn, and News, give the exact excerpt(s) that support the interest findings. Do not give random websites/Content if not found.
-
-    **Sources**
-    Website Content:
-    {website_content}
-
-    LinkedIn Profile Content:
-    {linkedin_content}
-
-    Recent News Articles:
-    {news_content}
-    """
-    
-    response = client.chat.completions.create(
-        model=AZURE_DEPLOYMENT,
-        messages=[{"role": "user", "content": combined_content}],
-    )
-    analysis = response.choices[0].message.content
-    
-    # Check if the analysis confirms a lead for this specific area
-    potential_lead_check = "Yes" if "Yes" in analysis or "yes" in analysis else "No"
-    
-    return analysis, potential_lead_check
-
 def extract_single_lead_details(lead_analysis, company):
     prompt = f"""
     Given the following lead analysis for the company "{company}", extract and return the following in plain text format:
     
-    1. Customer/Client Name
+    1. Customer Name
     2. Lead Identification Area (e.g., SFR150, Zones, DYN365, AI, AWS, Cost Takeout, Cloud Migration, Data Migration, Platform Migration, SaaS, GCC, Partner with IT) Mention any one. do not give more than one and no details.
-    3. Contact Information (such as phone numbers, email addresses, LinkedIn profiles, job titles)
 
     Format the output like this:
     
-    **Customer/Client Name**: <value>
+    **Customer Name**: <value>
     **Lead Identification Area**: <value>
-    **Contact Information**: <value>
     
     If a field is not found, just leave it like.
 
@@ -564,13 +530,66 @@ def extract_single_lead_details(lead_analysis, company):
     extracted = response.choices[0].message.content.strip()
     return extracted
 
+def check_potential_lead_by_area(single_lead_area, website_content, linkedin_content, news_content):
+    """
+    Analyzes content for a single, specific lead identification area.
+    Returns the detailed analysis and a 'Yes' or 'No' based on that area.
+    """
+    combined_content = f"""
+    You are a market-intelligence assistant. Your task is to analyze the following source materials and determine if there is any evidence of **{single_lead_area}**.
+
+    Decision rules (strict):
+    - Answer “Yes” ONLY if there is CLEAR, COMPANY-SPECIFIC evidence in the Sources below within the LAST 3 DAYS showing real interest or activity in **{single_lead_area}** (e.g., official announcements, press releases, case studies naming this company, exec statements, RFPs/tenders, partnerships, live projects, product/initiative pages tied to this company, or hiring/posts explicitly for this area).
+    - Generic capability/marketing pages, industry articles not tied to this company, vague mentions, or items older than 3 days → “No”.
+    - Use ONLY the provided Sources block. Do NOT invent or add outside links.
+    - Every “Yes” MUST include at least one exact excerpt and a URL from the Sources. If you cannot provide an excerpt + URL, answer “No”.
+
+    Provide a text report with the following sections:
+
+    1. **{single_lead_area}**
+       State "Yes" or "No". If "Yes", explain concisely why it is a potential lead and include an inline source link or supporting content if present. Do not add unrelated commentary.
+
+    2. **Contacts**
+       List all contacts found (email/phone/name+title) and the source source URL. Use only items present in Sources.
+       - If no contacts are found, OMIT the **Contacts** section entirely. Do not write placeholders like "Not available".
+
+    3. **Evidence**
+       Under sub-headings **Website**, **LinkedIn**, and **News**, include ONLY those sub-headings that have at least one supporting excerpt. For each excerpt, include the source URL and, if present, the date.
+       - If a source has no supporting excerpts, OMIT that sub-heading.
+       - If there are zero excerpts across all sources, OMIT the entire **Evidence** section.
+       - Never write placeholder lines like "No evidence found", "N/A", or similar.
+
+    **Sources**
+    Website Content:
+    {website_content}
+
+    LinkedIn Profile Content:
+    {linkedin_content}
+
+    Recent News Articles:
+    {news_content}
+
+
+    """
+    
+    response = client.chat.completions.create(
+        model=AZURE_DEPLOYMENT,
+        messages=[{"role": "user", "content": combined_content}],
+    )
+    analysis = response.choices[0].message.content
+    
+    # Check if the analysis confirms a lead for this specific area
+    potential_lead_check = "Yes" if "Yes" in analysis or "yes" in analysis else "No"
+    
+    return analysis, potential_lead_check
+
 # The Function App and Timer Trigger decorator
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 TARGET_COMPANY1 = os.getenv("TARGET_COMPANY1")
 
 
 @app.function_name(name="ComputaCenter")
-@app.schedule(schedule="0 30 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 30 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def ComputaCenter(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -594,7 +613,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=True
+            verify=False
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -651,7 +670,6 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
     except Exception as e:
         logging.error(f"❌ LinkedIn scraping error: {e}")
         return
-
     # 5. AI Lead Check
     logging.info("🤖 Performing AI-based lead analysis...")
     try:
@@ -663,7 +681,6 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
         logging.error(f"❌ OpenAI analysis error: {e}")
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
-
     if potential_lead_check.strip().lower() == "yes": 
         logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
         
@@ -732,17 +749,11 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                         
                         lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
                         lead_doc_bytes = lead_doc_stream.getvalue() 
-                        full_doc_name, full_doc_stream = create_full_docx(
-                            website_content, linkedin_content, news_content, company
-                        )
                         
                         logging.info("📄 DOCX files generated.")
                         
                         token = get_access_token() 
                         logging.info("🔐 Access token acquired.") 
-                        
-                        # Fix the markdown bolding here
-                        # clean_lead_area = remove_markdown_bold(lead_area)
 
                         email_body = ( 
                             f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
@@ -755,7 +766,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                             ["vishnu.kg@sonata-software.com"],
                             f"New Lead: {company} - {lead_area}", 
                             email_body, 
-                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                            attachments=[(lead_doc_name, lead_doc_stream)] 
                         ) 
                         
                         if sent: 
@@ -764,6 +775,8 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
                             logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
                         else: 
                             logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+                else:
+                    logging.info(f"🚫 No lead indication found for area '{lead_area}'; skipping email and API steps.")
             except Exception as e:
                 logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
                 
@@ -772,9 +785,10 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
 
     logging.info("✅ Lead generation cycle completed.")
 
+
 TARGET_COMPANY2 = os.getenv("TARGET_COMPANY2")
 @app.function_name(name="PennyMac")
-@app.schedule(schedule="0 35 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 35 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def PennyMac(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -798,7 +812,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=True
+            verify=False
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -855,7 +869,6 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
     except Exception as e:
         logging.error(f"❌ LinkedIn scraping error: {e}")
         return
-
     # 5. AI Lead Check
     logging.info("🤖 Performing AI-based lead analysis...")
     try:
@@ -867,7 +880,6 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
         logging.error(f"❌ OpenAI analysis error: {e}")
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
-
     if potential_lead_check.strip().lower() == "yes": 
         logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
         
@@ -936,17 +948,11 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
                         
                         lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
                         lead_doc_bytes = lead_doc_stream.getvalue() 
-                        full_doc_name, full_doc_stream = create_full_docx(
-                            website_content, linkedin_content, news_content, company
-                        )
                         
                         logging.info("📄 DOCX files generated.")
                         
                         token = get_access_token() 
                         logging.info("🔐 Access token acquired.") 
-                        
-                        # Fix the markdown bolding here
-                        # clean_lead_area = remove_markdown_bold(lead_area)
 
                         email_body = ( 
                             f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
@@ -959,7 +965,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
                             ["vishnu.kg@sonata-software.com"],
                             f"New Lead: {company} - {lead_area}", 
                             email_body, 
-                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                            attachments=[(lead_doc_name, lead_doc_stream)] 
                         ) 
                         
                         if sent: 
@@ -968,6 +974,8 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
                             logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
                         else: 
                             logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+                else:
+                    logging.info(f"🚫 No lead indication found for area '{lead_area}'; skipping email and API steps.")
             except Exception as e:
                 logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
                 
@@ -977,9 +985,10 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
     logging.info("✅ Lead generation cycle completed.")
 
 
+
 TARGET_COMPANY3 = os.getenv("TARGET_COMPANY3")
 @app.function_name(name="Fountaintire")
-@app.schedule(schedule="0 40 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 40 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def Fountaintire(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1003,7 +1012,7 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=True
+            verify=False
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1060,7 +1069,6 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
     except Exception as e:
         logging.error(f"❌ LinkedIn scraping error: {e}")
         return
-
     # 5. AI Lead Check
     logging.info("🤖 Performing AI-based lead analysis...")
     try:
@@ -1072,7 +1080,6 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
         logging.error(f"❌ OpenAI analysis error: {e}")
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
-
     if potential_lead_check.strip().lower() == "yes": 
         logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
         
@@ -1141,17 +1148,11 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
                         
                         lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
                         lead_doc_bytes = lead_doc_stream.getvalue() 
-                        full_doc_name, full_doc_stream = create_full_docx(
-                            website_content, linkedin_content, news_content, company
-                        )
                         
                         logging.info("📄 DOCX files generated.")
                         
                         token = get_access_token() 
                         logging.info("🔐 Access token acquired.") 
-                        
-                        # Fix the markdown bolding here
-                        # clean_lead_area = remove_markdown_bold(lead_area)
 
                         email_body = ( 
                             f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
@@ -1164,7 +1165,7 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
                             ["vishnu.kg@sonata-software.com"],
                             f"New Lead: {company} - {lead_area}", 
                             email_body, 
-                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                            attachments=[(lead_doc_name, lead_doc_stream)] 
                         ) 
                         
                         if sent: 
@@ -1173,6 +1174,8 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
                             logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
                         else: 
                             logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+                else:
+                    logging.info(f"🚫 No lead indication found for area '{lead_area}'; skipping email and API steps.")
             except Exception as e:
                 logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
                 
@@ -1182,10 +1185,9 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
     logging.info("✅ Lead generation cycle completed.")
 
 
-
 TARGET_COMPANY4 = os.getenv("TARGET_COMPANY4")
 @app.function_name(name="Wellpath")
-@app.schedule(schedule="0 45 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 45 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def Wellpath(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1209,7 +1211,7 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=True
+            verify=False
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1266,7 +1268,6 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
     except Exception as e:
         logging.error(f"❌ LinkedIn scraping error: {e}")
         return
-
     # 5. AI Lead Check
     logging.info("🤖 Performing AI-based lead analysis...")
     try:
@@ -1278,7 +1279,6 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
         logging.error(f"❌ OpenAI analysis error: {e}")
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
-
     if potential_lead_check.strip().lower() == "yes": 
         logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
         
@@ -1347,17 +1347,11 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
                         
                         lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
                         lead_doc_bytes = lead_doc_stream.getvalue() 
-                        full_doc_name, full_doc_stream = create_full_docx(
-                            website_content, linkedin_content, news_content, company
-                        )
                         
                         logging.info("📄 DOCX files generated.")
                         
                         token = get_access_token() 
                         logging.info("🔐 Access token acquired.") 
-                        
-                        # Fix the markdown bolding here
-                        # clean_lead_area = remove_markdown_bold(lead_area)
 
                         email_body = ( 
                             f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
@@ -1370,7 +1364,7 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
                             ["vishnu.kg@sonata-software.com"],
                             f"New Lead: {company} - {lead_area}", 
                             email_body, 
-                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                            attachments=[(lead_doc_name, lead_doc_stream)] 
                         ) 
                         
                         if sent: 
@@ -1379,6 +1373,8 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
                             logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
                         else: 
                             logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+                else:
+                    logging.info(f"🚫 No lead indication found for area '{lead_area}'; skipping email and API steps.")
             except Exception as e:
                 logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
                 
@@ -1387,10 +1383,9 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
 
     logging.info("✅ Lead generation cycle completed.")
 
-
 TARGET_COMPANY5 = os.getenv("TARGET_COMPANY5")
 @app.function_name(name="TUI")
-@app.schedule(schedule="0 50 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 50 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def TUI(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1414,7 +1409,7 @@ def TUI(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=True
+            verify=False
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1471,7 +1466,6 @@ def TUI(myTimer: func.TimerRequest) -> None:
     except Exception as e:
         logging.error(f"❌ LinkedIn scraping error: {e}")
         return
-
     # 5. AI Lead Check
     logging.info("🤖 Performing AI-based lead analysis...")
     try:
@@ -1483,7 +1477,6 @@ def TUI(myTimer: func.TimerRequest) -> None:
         logging.error(f"❌ OpenAI analysis error: {e}")
         return
     logging.info(f"🔍 Is '{company}' a potential lead? → {potential_lead_check}")
-
     if potential_lead_check.strip().lower() == "yes": 
         logging.info("📌 Lead confirmed. Extracting all potential lead areas...") 
         
@@ -1552,17 +1545,11 @@ def TUI(myTimer: func.TimerRequest) -> None:
                         
                         lead_doc_name, lead_doc_stream = create_lead_docx(area_analysis, company)
                         lead_doc_bytes = lead_doc_stream.getvalue() 
-                        full_doc_name, full_doc_stream = create_full_docx(
-                            website_content, linkedin_content, news_content, company
-                        )
                         
                         logging.info("📄 DOCX files generated.")
                         
                         token = get_access_token() 
                         logging.info("🔐 Access token acquired.") 
-                        
-                        # Fix the markdown bolding here
-                        # clean_lead_area = remove_markdown_bold(lead_area)
 
                         email_body = ( 
                             f"<html><body><p>A new potential lead has been identified for <strong>{company}</strong> in the area of <strong>{lead_area}</strong>.</p>" 
@@ -1575,7 +1562,7 @@ def TUI(myTimer: func.TimerRequest) -> None:
                             ["vishnu.kg@sonata-software.com"],
                             f"New Lead: {company} - {lead_area}", 
                             email_body, 
-                            attachments=[(lead_doc_name, lead_doc_stream), (full_doc_name, full_doc_stream)] 
+                            attachments=[(lead_doc_name, lead_doc_stream)] 
                         ) 
                         
                         if sent: 
@@ -1584,6 +1571,8 @@ def TUI(myTimer: func.TimerRequest) -> None:
                             logging.info(f"📨 Lead data posted to external API for area: '{lead_area}'") 
                         else: 
                             logging.warning(f"⚠️ Email not sent for area: '{lead_area}'") 
+                else:
+                    logging.info(f"🚫 No lead indication found for area '{lead_area}'; skipping email and API steps.")
             except Exception as e:
                 logging.error(f"❌ Error processing lead area '{lead_area}': {e}")
                 
