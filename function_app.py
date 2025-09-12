@@ -589,7 +589,7 @@ TARGET_COMPANY1 = os.getenv("TARGET_COMPANY1")
 
 
 @app.function_name(name="ComputaCenter")
-@app.schedule(schedule="0 30 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 30 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def ComputaCenter(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -613,7 +613,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=False
+            verify=True
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -788,7 +788,7 @@ def ComputaCenter(myTimer: func.TimerRequest) -> None:
 
 TARGET_COMPANY2 = os.getenv("TARGET_COMPANY2")
 @app.function_name(name="PennyMac")
-@app.schedule(schedule="0 35 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 35 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def PennyMac(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -812,7 +812,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=False
+            verify=True
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -988,7 +988,7 @@ def PennyMac(myTimer: func.TimerRequest) -> None:
 
 TARGET_COMPANY3 = os.getenv("TARGET_COMPANY3")
 @app.function_name(name="Fountaintire")
-@app.schedule(schedule="0 40 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 40 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def Fountaintire(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1012,7 +1012,7 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=False
+            verify=True
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1187,7 +1187,7 @@ def Fountaintire(myTimer: func.TimerRequest) -> None:
 
 TARGET_COMPANY4 = os.getenv("TARGET_COMPANY4")
 @app.function_name(name="Wellpath")
-@app.schedule(schedule="0 45 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 45 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def Wellpath(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1211,7 +1211,7 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=False
+            verify=True
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1385,7 +1385,7 @@ def Wellpath(myTimer: func.TimerRequest) -> None:
 
 TARGET_COMPANY5 = os.getenv("TARGET_COMPANY5")
 @app.function_name(name="TUI")
-@app.schedule(schedule="0 50 10 3,6,9,12,15,18,21,24,27,30 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
+@app.schedule(schedule="0 50 5 2,5,8,11,14,17,20,23,26,29 * *", arg_name="myTimer", run_on_startup=False, use_monitor=True)
 def TUI(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.utcnow()
 
@@ -1409,7 +1409,7 @@ def TUI(myTimer: func.TimerRequest) -> None:
         resp = requests.get(
             BASE_URL,
             params={"q": company, "from": frm, "to": to, "lang": "en", "token": GNEWS_API_KEY},
-            verify=False
+            verify=True
         )
         resp.raise_for_status()
         for art in resp.json().get("articles", []):
@@ -1580,3 +1580,4 @@ def TUI(myTimer: func.TimerRequest) -> None:
         logging.info(f"🚫 '{company}' is not identified as a potential lead; skipping all downstream steps.") 
 
     logging.info("✅ Lead generation cycle completed.")
+
